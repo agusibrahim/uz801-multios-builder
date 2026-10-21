@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>UZ801 Modem Manager — Mainline 6.12</title>
+  <title>UZ801 Modem & Hotspot Manager — Mainline 6.12</title>
   <style>
     :root {
       --bg-page: #fafafa;
@@ -55,7 +55,7 @@
       top: 0;
       z-index: 40;
       height: 56px;
-      background: rgba(255, 255, 255, 0.88);
+      background: rgba(255, 255, 255, 0.9);
       backdrop-filter: blur(8px);
       border-bottom: 1px solid var(--border);
       display: flex;
@@ -95,13 +95,13 @@
     /* Main Layout */
     .layout {
       display: grid;
-      grid-template-columns: 236px 1fr;
+      grid-template-columns: 244px 1fr;
       flex: 1;
-      max-width: 1560px;
+      max-width: 1600px;
       width: 100%;
       margin: 0 auto;
     }
-    @media (max-width: 920px) {
+    @media (max-width: 960px) {
       .layout { grid-template-columns: 1fr; }
       .sidebar {
         border-right: none !important;
@@ -118,10 +118,10 @@
     .sidebar {
       border-right: 1px solid var(--border);
       background: var(--bg-page);
-      padding: 18px 12px;
+      padding: 16px 12px;
       display: flex;
       flex-direction: column;
-      gap: 3px;
+      gap: 2px;
     }
     .nav-group-title {
       font-size: 11px;
@@ -136,12 +136,12 @@
       align-items: center;
       gap: 9px;
       width: 100%;
-      padding: 8px 10px;
+      padding: 7.5px 10px;
       border-radius: 6px;
       border: 1px solid transparent;
       background: transparent;
       color: var(--text-secondary);
-      font-size: 13.5px;
+      font-size: 13px;
       font-weight: 500;
       cursor: pointer;
       text-align: left;
@@ -159,8 +159,8 @@
       box-shadow: var(--shadow-xs);
     }
     .nav-btn svg {
-      width: 16px;
-      height: 16px;
+      width: 15px;
+      height: 15px;
       color: var(--text-muted);
       flex-shrink: 0;
     }
@@ -180,6 +180,7 @@
       align-items: center;
       justify-content: space-between;
       gap: 12px;
+      flex-wrap: wrap;
       padding-bottom: 4px;
     }
     .page-title {
@@ -196,7 +197,7 @@
     /* Grids */
     .grid-4 {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(225px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
       gap: 16px;
     }
     .grid-3 {
@@ -320,6 +321,7 @@
       transition: all 0.12s ease;
       font-family: var(--font-sans);
       white-space: nowrap;
+      text-decoration: none;
     }
     .btn:disabled { opacity: 0.5; cursor: not-allowed; }
     .btn-primary {
@@ -343,10 +345,9 @@
       border-color: var(--danger-border);
       color: var(--danger);
     }
-    .btn-danger:hover:not(:disabled) {
-      background: #fee2e2;
-    }
+    .btn-danger:hover:not(:disabled) { background: #fee2e2; }
     .btn-sm { height: 28px; padding: 0 10px; font-size: 12px; }
+    .btn-xs { height: 24px; padding: 0 8px; font-size: 11.5px; }
 
     /* Form Controls */
     .label {
@@ -428,10 +429,11 @@
       font-weight: 500;
       font-size: 12px;
       background: var(--bg-page);
+      white-space: nowrap;
     }
     tr:last-child td { border-bottom: none; }
 
-    /* Clean Light Code Viewer (No black hacker box) */
+    /* Clean Light Code Viewer */
     .code-box {
       background: var(--bg-muted);
       color: var(--text-main);
@@ -447,10 +449,62 @@
       overflow-y: auto;
     }
 
+    /* Phone Mockup Frame for Captive Portal Preview */
+    .preview-stage {
+      background: var(--bg-page);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 18px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+    .phone-frame {
+      width: 375px;
+      max-width: 100%;
+      height: 660px;
+      background: #ffffff;
+      border: 6px solid #18181b;
+      border-radius: 32px;
+      box-shadow: 0 12px 30px rgba(0, 0, 0, 0.08);
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      transition: width 0.2s ease, border-radius 0.2s ease;
+    }
+    .phone-frame.desktop-mode {
+      width: 100%;
+      height: 600px;
+      border-width: 2px;
+      border-radius: 10px;
+    }
+    .phone-StatusBar {
+      height: 28px;
+      background: #f4f4f5;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 0 16px;
+      font-size: 11px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      font-family: var(--font-mono);
+    }
+
+    .swatch-btn {
+      width: 28px;
+      height: 28px;
+      border-radius: 999px;
+      border: 2px solid #ffffff;
+      box-shadow: 0 0 0 1px var(--border-strong);
+      cursor: pointer;
+    }
+
     .tab-pane { display: none; flex-direction: column; gap: 18px; }
     .tab-pane.active { display: flex; }
 
-    /* Toast */
     #toast {
       position: fixed;
       bottom: 20px;
@@ -471,12 +525,13 @@
   <header class="topbar">
     <div class="brand">
       <span class="brand-icon">4G</span>
-      <span>UZ801 Modem Manager</span>
+      <span>UZ801 Modem & Hotspot Suite</span>
       <span class="badge" id="top-os-badge">Loading...</span>
       <span class="badge mono" id="top-kernel-badge">6.12.1-msm8916</span>
     </div>
     <div class="topbar-right">
-      <span class="badge badge-emerald" id="top-lte-badge">LTE: --</span>
+      <span class="badge badge-emerald" id="top-lte-badge">4G: --</span>
+      <span class="badge badge-sky" id="top-clients-badge">Klien: 0</span>
       <span class="badge" id="top-temp-badge">SoC: -- °C</span>
       <button class="btn btn-outline btn-sm" onclick="refreshAll()">↻ Refresh</button>
     </div>
@@ -484,7 +539,7 @@
 
   <div class="layout">
     <aside class="sidebar">
-      <div class="nav-group-title">Modem & Cellular</div>
+      <div class="nav-group-title">Telemetri & Seluler</div>
       <button class="nav-btn active" onclick="switchTab('overview', this)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/></svg>
         Ringkasan (Overview)
@@ -502,10 +557,24 @@
         USSD Dialer (*888#)
       </button>
 
-      <div class="nav-group-title">Jaringan & Perangkat</div>
+      <div class="nav-group-title">Hotspot & Billing Voucher</div>
+      <button class="nav-btn" onclick="switchTab('hotspot', this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Hotspot & Kelola Klien
+      </button>
+      <button class="nav-btn" onclick="switchTab('vouchers', this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+        Voucher, Kuota & Durasi
+      </button>
+      <button class="nav-btn" onclick="switchTab('portal', this)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+        Editor Captive Portal
+      </button>
+
+      <div class="nav-group-title">Sistem & Perangkat Keras</div>
       <button class="nav-btn" onclick="switchTab('wifi', this)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M5 12.55a11 11 0 0 1 14.08 0"/><path d="M1.42 9a16 16 0 0 1 21.16 0"/><path d="M8.53 16.11a6 6 0 0 1 6.95 0"/><line x1="12" y1="20" x2="12.01" y2="20"/></svg>
-        WiFi, Hotspot & DNS
+        WiFi Client, Route & DNS
       </button>
       <button class="nav-btn" onclick="switchTab('hardware', this)">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="4" y="4" width="16" height="16" rx="2"/><rect x="9" y="9" width="6" height="6"/><line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/><line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/></svg>
@@ -523,16 +592,16 @@
         <div class="page-header">
           <div>
             <div class="page-title">Ringkasan Sistem & Modem</div>
-            <div class="page-subtitle">Status real-time modem 4G LTE, trafik jaringan, memori, dan temperatur perangkat</div>
+            <div class="page-subtitle">Status real-time modem 4G LTE, klien aktif, trafik data, memori, dan temperatur</div>
           </div>
-          <div style="display:flex;gap:8px;">
+          <div style="display:flex;gap:8px;flex-wrap:wrap;">
             <button class="btn btn-outline btn-sm" onclick="setCPU('powersave', 533)">🍃 Mode Dingin (533 MHz)</button>
             <button class="btn btn-outline btn-sm" onclick="setLEDPreset('stealth')">Matikan LED</button>
+            <a class="btn btn-outline btn-sm" href="/portal" target="_blank">↗ Buka Halaman Portal</a>
           </div>
         </div>
 
         <div class="grid-4">
-          <!-- Cellular Card -->
           <div class="card">
             <div class="card-header">
               <span class="card-title">Jaringan Seluler 4G</span>
@@ -560,7 +629,6 @@
             </div>
           </div>
 
-          <!-- CPU & Thermal Card -->
           <div class="card">
             <div class="card-header">
               <span class="card-title">Prosesor & Suhu SoC</span>
@@ -577,7 +645,6 @@
             </div>
           </div>
 
-          <!-- Memory & ZRAM Card -->
           <div class="card">
             <div class="card-header">
               <span class="card-title">Memori RAM & ZRAM</span>
@@ -591,7 +658,6 @@
             </div>
           </div>
 
-          <!-- eMMC Storage & Uptime Card -->
           <div class="card">
             <div class="card-header">
               <span class="card-title">Penyimpanan eMMC (/)</span>
@@ -601,12 +667,11 @@
             <div class="progress"><div class="progress-bar" id="ov-disk-bar" style="width:0%"></div></div>
             <div class="kv-list">
               <div class="kv-row"><span class="kv-key">Init System</span><span class="kv-val" id="ov-init">--</span></div>
-              <div class="kv-row"><span class="kv-key">Waktu Aktif (Uptime)</span><span class="kv-val" id="ov-uptime">--</span></div>
+              <div class="kv-row"><span class="kv-key">Waktu Aktif</span><span class="kv-val" id="ov-uptime">--</span></div>
             </div>
           </div>
         </div>
 
-        <!-- Throughput & Interfaces -->
         <div class="grid-2">
           <div class="card">
             <div class="card-header">
@@ -646,23 +711,6 @@
                 <tbody id="if-table-body"></tbody>
               </table>
             </div>
-          </div>
-        </div>
-
-        <!-- USB DHCP Leases -->
-        <div class="card">
-          <div class="card-header">
-            <div>
-              <div class="card-title">Perangkat Terhubung via USB (DHCP Leases usb0)</div>
-              <div class="card-desc">Komputer/host yang mendapat IP otomatis dari modem (192.168.42.10 – 250)</div>
-            </div>
-            <span class="badge mono" id="usb-mode-badge">NCM</span>
-          </div>
-          <div class="table-wrap">
-            <table>
-              <thead><tr><th>Nama Perangkat</th><th>Alamat IPv4</th><th>MAC Address</th><th>Masa Aktif Lease</th></tr></thead>
-              <tbody id="leases-tbody"></tbody>
-            </table>
           </div>
         </div>
       </section>
@@ -709,20 +757,9 @@
             <div style="display:flex;flex-wrap:wrap;gap:8px;padding-top:4px;">
               <button class="btn btn-primary" onclick="modemAction('connect')">Hubungkan 4G LTE</button>
               <button class="btn btn-outline" onclick="modemAction('disconnect')">Putuskan</button>
-              <button class="btn btn-outline" onclick="modemAction('power_low')">Mode Pesawat (Hemat Daya)</button>
+              <button class="btn btn-outline" onclick="modemAction('power_low')">Mode Pesawat</button>
               <button class="btn btn-outline" onclick="modemAction('power_on')">Nyalakan Radio</button>
               <button class="btn btn-danger" onclick="modemAction('reset')">Restart Modem DSP</button>
-            </div>
-
-            <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px;display:flex;justify-content:space-between;align-items:center;">
-              <div>
-                <div class="card-title" style="font-size:13px;">Watchdog Auto-Reconnect 4G</div>
-                <div class="card-desc">Otomatis menyambungkan ulang bearer 4G jika ping 1.1.1.1 terputus</div>
-              </div>
-              <div style="display:flex;gap:6px;">
-                <button class="btn btn-outline btn-sm" onclick="setWatchdog(true)">Aktifkan</button>
-                <button class="btn btn-outline btn-sm" onclick="setWatchdog(false)">Matikan</button>
-              </div>
             </div>
           </div>
 
@@ -751,7 +788,384 @@
         </div>
       </section>
 
-      <!-- TAB 3: SMS INBOX & COMPOSER -->
+      <!-- TAB 3: HOTSPOT & CLIENT MANAGER -->
+      <section id="tab-hotspot" class="tab-pane">
+        <div class="page-header">
+          <div>
+            <div class="page-title">MiFi Hotspot & Manajemen Klien Aktif</div>
+            <div class="page-subtitle">Pancarkan WiFi Hotspot 4G, pantau pemakaian kuota tiap klien, batasi kuota, atau putuskan/blokir perangkat</div>
+          </div>
+          <button class="btn btn-outline btn-sm" onclick="refreshAll()">↻ Segarkan Klien</button>
+        </div>
+
+        <div class="grid-2">
+          <!-- Hotspot AP Config -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Pengaturan Pemancar WiFi Hotspot (AP Mode)</div>
+                <div class="card-desc">Bagikan internet 4G LTE (wwan0) melalui chip WiFi WCN3620</div>
+              </div>
+              <span class="badge" id="hs-status-badge">Standby</span>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+              <div>
+                <label class="label">Nama WiFi Hotspot (SSID)</label>
+                <input class="input" id="hs-ssid" value="UZ801-4G-Hotspot" />
+              </div>
+              <div>
+                <label class="label">Password WPA2 (Min. 8 Karakter)</label>
+                <input class="input mono" id="hs-pass" value="12345678" />
+              </div>
+              <div>
+                <label class="label">Channel 2.4GHz</label>
+                <select class="select mono" id="hs-chan">
+                  <option value="1">Channel 1 (2412 MHz)</option>
+                  <option value="6" selected>Channel 6 (2437 MHz)</option>
+                  <option value="11">Channel 11 (2462 MHz)</option>
+                </select>
+              </div>
+              <div>
+                <label class="label">Maksimal Klien</label>
+                <input class="input mono" type="number" id="hs-max" value="10" />
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
+              <button class="btn btn-primary" onclick="saveHotspot(true)">Nyalakan MiFi Hotspot</button>
+              <button class="btn btn-outline" onclick="saveHotspot(false)">Matikan Hotspot (Kembali ke WiFi Client)</button>
+            </div>
+          </div>
+
+          <!-- Quick Client Quota / Nickname Editor -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Atur Nama, Batas Kuota & Voucher Klien</div>
+                <div class="card-desc">Pilih perangkat dari tabel di bawah untuk memberi nama panggilan atau batas kuota MB</div>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+              <div>
+                <label class="label">MAC Address Klien</label>
+                <input class="input mono" id="cl-mac" placeholder="aa:bb:cc:dd:ee:ff" />
+              </div>
+              <div>
+                <label class="label">Nama Panggilan (Nickname)</label>
+                <input class="input" id="cl-nick" placeholder="Misal: HP Budi / Laptop Kerja" />
+              </div>
+              <div>
+                <label class="label">Batas Kuota Langsung (MB, 0 = Tanpa Batas)</label>
+                <input class="input mono" type="number" id="cl-quota" value="0" />
+              </div>
+              <div>
+                <label class="label">Pasang Kode Voucher ke MAC Ini</label>
+                <input class="input mono" id="cl-voucher" placeholder="Misal: TAMU-1GB" />
+              </div>
+            </div>
+            <div style="display:flex;gap:8px;flex-wrap:wrap;">
+              <button class="btn btn-primary btn-sm" onclick="saveClientMeta()">Simpan Batas Klien</button>
+              <button class="btn btn-outline btn-sm" onclick="bindVoucherToClient()">Aktifkan Voucher ke MAC Ini</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Connected Clients Table -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Daftar Klien Terhubung (WiFi & USB)</div>
+              <div class="card-desc">Pantau pemakaian kuota, sinyal WiFi, voucher aktif, dan lakukan Kick / Blokir MAC secara instan</div>
+            </div>
+            <span class="badge mono" id="cl-count-badge">0 perangkat</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Perangkat / Hostname</th>
+                  <th>IP & Antarmuka</th>
+                  <th>MAC Address</th>
+                  <th>Sinyal</th>
+                  <th>Pemakaian Data</th>
+                  <th>Voucher / Batas Kuota</th>
+                  <th>Status</th>
+                  <th>Tindakan (Kick / Blokir)</th>
+                </tr>
+              </thead>
+              <tbody id="clients-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 4: VOUCHER & USER MANAGEMENT -->
+      <section id="tab-vouchers" class="tab-pane">
+        <div class="page-header">
+          <div>
+            <div class="page-title">Manajemen Voucher, Kuota & Masa Aktif</div>
+            <div class="page-subtitle">Buat kode voucher dengan batas kuota (MB/GB) dan durasi aktif otomatis (terputus otomatis saat habis)</div>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-outline btn-sm" onclick="printVouchers()">🖨️ Cetak Kartu Voucher</button>
+            <a class="btn btn-primary btn-sm" href="/portal" target="_blank">↗ Uji Login Captive Portal</a>
+          </div>
+        </div>
+
+        <div class="grid-2">
+          <!-- Single Voucher Creator -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Buat Voucher Tunggal / User Kustom</div>
+                <div class="card-desc">Kosongkan kode voucher bila ingin dibuatkan otomatis secara acak</div>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+              <div>
+                <label class="label">Kode Voucher / Username</label>
+                <input class="input mono" id="vc-code" placeholder="Otomatis (misal: UZ-8F4K2)" />
+              </div>
+              <div>
+                <label class="label">Nama Paket / Label</label>
+                <input class="input" id="vc-label" value="Paket Harian 1GB" />
+              </div>
+              <div>
+                <label class="label">Batas Kuota Data (MB, 0 = Unlimited)</label>
+                <input class="input mono" type="number" id="vc-quota" value="1024" />
+              </div>
+              <div>
+                <label class="label">Masa Aktif Sejak Login Pertama</label>
+                <select class="select mono" id="vc-dur">
+                  <option value="60">1 Jam (60 Menit)</option>
+                  <option value="180">3 Jam (180 Menit)</option>
+                  <option value="360">6 Jam (360 Menit)</option>
+                  <option value="1440" selected>1 Hari (24 Jam)</option>
+                  <option value="4320">3 Hari (72 Jam)</option>
+                  <option value="10080">7 Hari (1 Minggu)</option>
+                  <option value="43200">30 Hari (1 Bulan)</option>
+                  <option value="0">Tanpa Batas Waktu</option>
+                </select>
+              </div>
+              <div>
+                <label class="label">Batas Kecepatan (Kbps, 0 = Maksimal)</label>
+                <input class="input mono" type="number" id="vc-speed" value="5000" />
+              </div>
+              <div>
+                <label class="label">Maksimal Perangkat (MAC Binding)</label>
+                <input class="input mono" type="number" id="vc-maxdev" value="1" />
+              </div>
+            </div>
+            <div style="display:flex;gap:6px;flex-wrap:wrap;">
+              <button class="btn btn-outline btn-xs" onclick="setVoucherPreset('Voucher 3 Jam', 500, 180, 2000)">Preset: 500MB / 3 Jam</button>
+              <button class="btn btn-outline btn-xs" onclick="setVoucherPreset('Paket Harian 2GB', 2048, 1440, 5000)">Preset: 2GB / 24 Jam</button>
+              <button class="btn btn-outline btn-xs" onclick="setVoucherPreset('Paket Mingguan 10GB', 10240, 10080, 10000)">Preset: 10GB / 7 Hari</button>
+              <button class="btn btn-outline btn-xs" onclick="setVoucherPreset('VIP Unlimited', 0, 43200, 0)">Preset: Unlimited 30 Hari</button>
+            </div>
+            <div>
+              <button class="btn btn-primary" onclick="createVoucher('create')">+ Buat Voucher</button>
+            </div>
+          </div>
+
+          <!-- Batch Voucher Generator -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Generator Voucher Massal (Batch)</div>
+                <div class="card-desc">Buat banyak kode voucher sekaligus untuk dicetak atau dibagikan</div>
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+              <div>
+                <label class="label">Awalan Kode (Prefix)</label>
+                <input class="input mono" id="vb-prefix" value="VCR" />
+              </div>
+              <div>
+                <label class="label">Jumlah Voucher (1 – 50)</label>
+                <input class="input mono" type="number" id="vb-count" value="5" />
+              </div>
+              <div>
+                <label class="label">Nama Paket</label>
+                <input class="input" id="vb-label" value="Voucher Hotspot" />
+              </div>
+              <div>
+                <label class="label">Batas Kuota (MB, 0 = Unlimited)</label>
+                <input class="input mono" type="number" id="vb-quota" value="1024" />
+              </div>
+              <div>
+                <label class="label">Masa Aktif (Menit)</label>
+                <input class="input mono" type="number" id="vb-dur" value="1440" />
+              </div>
+              <div>
+                <label class="label">Maksimal Perangkat per Voucher</label>
+                <input class="input mono" type="number" id="vb-maxdev" value="1" />
+              </div>
+            </div>
+            <div>
+              <button class="btn btn-primary" onclick="createVoucher('batch')">⚡ Generate Batch Voucher</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- Voucher List Table -->
+        <div class="card">
+          <div class="card-header">
+            <div>
+              <div class="card-title">Daftar Voucher & Status Pemakaian Kuota / Waktu</div>
+              <div class="card-desc">Masa aktif baru berjalan saat kode voucher pertama kali dipakai login</div>
+            </div>
+            <span class="badge mono" id="vc-total-badge">0 voucher</span>
+          </div>
+          <div class="table-wrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Kode Voucher</th>
+                  <th>Paket / Label</th>
+                  <th>Pemakaian Kuota</th>
+                  <th>Durasi & Sisa Waktu</th>
+                  <th>Perangkat (MAC)</th>
+                  <th>Status</th>
+                  <th>Aksi</th>
+                </tr>
+              </thead>
+              <tbody id="vouchers-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 5: CAPTIVE PORTAL VISUAL EDITOR & LIVE PREVIEW -->
+      <section id="tab-portal" class="tab-pane">
+        <div class="page-header">
+          <div>
+            <div class="page-title">Studio Editor Captive Portal & Live Preview</div>
+            <div class="page-subtitle">Sesuaikan tampilan halaman login pelanggan hotspot secara real-time</div>
+          </div>
+          <div style="display:flex;gap:8px;">
+            <button class="btn btn-outline btn-sm" onclick="togglePreviewDevice()" id="preview-mode-btn">🖥️ Mode Layar Desktop</button>
+            <a class="btn btn-outline btn-sm" href="/portal" target="_blank">↗ Buka /portal di Tab Baru</a>
+            <button class="btn btn-primary btn-sm" onclick="savePortalDesign()">💾 Simpan Desain Portal</button>
+          </div>
+        </div>
+
+        <div class="grid-2" style="align-items:start;">
+          <!-- Left: Editor Controls -->
+          <div class="card">
+            <div class="card-header">
+              <div>
+                <div class="card-title">Kustomisasi Konten & Tema Captive Portal</div>
+                <div class="card-desc">Setiap perubahan langsung terlihat pada layar pratinjau di sebelah kanan</div>
+              </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+              <div>
+                <label class="label">Nama Brand / Hotspot</label>
+                <input class="input" id="pe-brand" oninput="syncPortalPreview()" />
+              </div>
+              <div>
+                <label class="label">Badge Sudut Kanan Atas</label>
+                <input class="input mono" id="pe-badge" oninput="syncPortalPreview()" />
+              </div>
+            </div>
+
+            <div>
+              <label class="label">Judul Sambutan Utama (Headline)</label>
+              <input class="input" id="pe-title" oninput="syncPortalPreview()" />
+            </div>
+
+            <div>
+              <label class="label">Subjudul / Instruksi Login</label>
+              <textarea class="textarea" rows="2" id="pe-subtitle" oninput="syncPortalPreview()"></textarea>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+              <div>
+                <label class="label">Teks Tombol Login</label>
+                <input class="input" id="pe-btn" oninput="syncPortalPreview()" />
+              </div>
+              <div>
+                <label class="label">Kontak Kasir / WhatsApp Admin</label>
+                <input class="input mono" id="pe-contact" oninput="syncPortalPreview()" />
+              </div>
+            </div>
+
+            <div>
+              <label class="label">Teks Banner Informasi / Pengumuman</label>
+              <input class="input" id="pe-ann" oninput="syncPortalPreview()" />
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;align-items:center;">
+              <div>
+                <label class="label">Warna Aksen Utama</label>
+                <div style="display:flex;gap:8px;align-items:center;margin-top:4px;">
+                  <button class="swatch-btn" style="background:#18181b" onclick="setPortalColor('#18181b')" title="Zinc Ink"></button>
+                  <button class="swatch-btn" style="background:#059669" onclick="setPortalColor('#059669')" title="Emerald"></button>
+                  <button class="swatch-btn" style="background:#0284c7" onclick="setPortalColor('#0284c7')" title="Ocean Blue"></button>
+                  <button class="swatch-btn" style="background:#d97706" onclick="setPortalColor('#d97706')" title="Warm Amber"></button>
+                  <button class="swatch-btn" style="background:#e11d48" onclick="setPortalColor('#e11d48')" title="Rose"></button>
+                  <input type="color" id="pe-color" value="#18181b" onchange="syncPortalPreview()" style="width:30px;height:28px;border:none;background:none;cursor:pointer;" />
+                </div>
+              </div>
+              <div>
+                <label class="label">Gaya Latar Belakang</label>
+                <select class="select" id="pe-bg" onchange="syncPortalPreview()">
+                  <option value="stone">Alabaster Stone (#FAFAFA)</option>
+                  <option value="white">Pure Crisp White (#FFFFFF)</option>
+                  <option value="warm">Warm Paper (#FDFBF7)</option>
+                  <option value="sky">Soft Daylight Sky (#F0F9FF)</option>
+                  <option value="emerald">Soft Mint (#F0FDF4)</option>
+                </select>
+              </div>
+            </div>
+
+            <div style="border-top:1px solid var(--border);padding-top:12px;">
+              <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+                <label class="label" style="margin:0;">Daftar Harga Paket di Halaman Portal</label>
+                <div style="display:flex;gap:8px;align-items:center;">
+                  <label style="font-size:12px;display:flex;align-items:center;gap:4px;cursor:pointer;">
+                    <input type="checkbox" id="pe-show-pkg" checked onchange="syncPortalPreview()" /> Tampilkan
+                  </label>
+                  <button class="btn btn-outline btn-xs" onclick="addPortalPkg()">+ Tambah Paket</button>
+                </div>
+              </div>
+              <div id="pe-pkg-rows" style="display:flex;flex-direction:column;gap:6px;"></div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+              <div>
+                <label class="label">Teks Footer</label>
+                <input class="input" id="pe-footer" oninput="syncPortalPreview()" />
+              </div>
+              <div>
+                <label class="label">Custom CSS Tambahan (Opsional)</label>
+                <input class="input mono" id="pe-css" placeholder=".portal-card { ... }" oninput="syncPortalPreview()" />
+              </div>
+            </div>
+
+            <div style="display:flex;gap:8px;">
+              <button class="btn btn-primary" onclick="savePortalDesign()">💾 Simpan Desain Captive Portal</button>
+            </div>
+          </div>
+
+          <!-- Right: Live Interactive Smartphone / Desktop Preview -->
+          <div class="preview-stage">
+            <div style="margin-bottom:10px;display:flex;align-items:center;gap:8px;">
+              <span class="badge badge-emerald">● Live Interactive Preview</span>
+              <span class="card-desc">Bisa langsung diuji ketik kode voucher di dalam layar pratinjau</span>
+            </div>
+            <div class="phone-frame" id="preview-frame-wrap">
+              <div class="phone-StatusBar">
+                <span>9:41</span>
+                <span>4G LTE · WiFi</span>
+              </div>
+              <iframe id="portal-iframe" src="/portal" style="width:100%;flex:1;border:none;background:#fafafa;"></iframe>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- TAB 6: SMS INBOX & COMPOSER -->
       <section id="tab-sms" class="tab-pane">
         <div class="page-header">
           <div>
@@ -786,7 +1200,7 @@
             <div class="card-header">
               <div>
                 <div class="card-title">Daftar Pesan SMS di Kartu SIM / Modem</div>
-                <div class="card-desc">Klik tombol Copy OTP jika pesan berisi kode verifikasi angka</div>
+                <div class="card-desc">Klik tombol Salin OTP jika pesan berisi kode verifikasi angka</div>
               </div>
               <span class="badge mono" id="sms-count-badge">0 pesan</span>
             </div>
@@ -797,7 +1211,7 @@
         </div>
       </section>
 
-      <!-- TAB 4: USSD DIALER -->
+      <!-- TAB 7: USSD DIALER -->
       <section id="tab-ussd" class="tab-pane">
         <div class="page-header">
           <div>
@@ -832,17 +1246,16 @@
         </div>
       </section>
 
-      <!-- TAB 5: WIFI, HOTSPOT, ROUTING & DNS -->
+      <!-- TAB 8: WIFI CLIENT, ROUTING & DNS -->
       <section id="tab-wifi" class="tab-pane">
         <div class="page-header">
           <div>
-            <div class="page-title">WiFi, MiFi Hotspot, Routing & DNS Adblock</div>
-            <div class="page-subtitle">Atur prioritas internet, berbagi koneksi (NAT), pemblokir iklan DNS, dan mode WiFi</div>
+            <div class="page-title">WiFi Client, Prioritas Gateway & DNS Adblock</div>
+            <div class="page-subtitle">Atur jalur utama internet, berbagi koneksi (NAT), pemblokir iklan DNS, dan koneksi WiFi rumah</div>
           </div>
         </div>
 
         <div class="grid-2">
-          <!-- Gateway & DNS Card -->
           <div class="card">
             <div class="card-header">
               <div>
@@ -873,12 +1286,11 @@
             </div>
           </div>
 
-          <!-- WiFi Client & Hotspot Card -->
           <div class="card">
             <div class="card-header">
               <div>
-                <div class="card-title">Koneksi WiFi Client (STA) & Mode MiFi Hotspot (AP)</div>
-                <div class="card-desc">Hubungkan ke router rumah atau pancarkan sinyal WiFi Hotspot dari 4G</div>
+                <div class="card-title">Pemindai Jaringan WiFi Client (STA Mode)</div>
+                <div class="card-desc">Hubungkan dongle ke jaringan WiFi rumah/kantor</div>
               </div>
               <button class="btn btn-outline btn-sm" onclick="scanWiFi()">↻ Pindai WiFi</button>
             </div>
@@ -889,12 +1301,11 @@
               </div>
               <div>
                 <label class="label">Kata Sandi WiFi</label>
-                <input class="input" id="wifi-pass" type="password" placeholder="Minimal 8 karakter" />
+                <input class="input" id="wifi-pass" type="password" placeholder="Kata sandi" />
               </div>
             </div>
-            <div style="display:flex;gap:8px;flex-wrap:wrap;">
-              <button class="btn btn-primary btn-sm" onclick="connectWiFi('sta')">Hubungkan sebagai Client (STA)</button>
-              <button class="btn btn-outline btn-sm" onclick="connectWiFi('ap')">Pancarkan sebagai MiFi Hotspot (AP)</button>
+            <div>
+              <button class="btn btn-primary btn-sm" onclick="connectWiFi('sta')">Hubungkan ke WiFi Ini</button>
             </div>
             <div class="table-wrap" style="max-height:220px;">
               <table>
@@ -906,7 +1317,7 @@
         </div>
       </section>
 
-      <!-- TAB 6: THERMAL, CPU, USB & LEDS -->
+      <!-- TAB 9: THERMAL, CPU, USB & LEDS -->
       <section id="tab-hardware" class="tab-pane">
         <div class="page-header">
           <div>
@@ -916,7 +1327,6 @@
         </div>
 
         <div class="grid-2">
-          <!-- Thermal & CPU Cooler -->
           <div class="card">
             <div class="card-header">
               <div>
@@ -937,7 +1347,6 @@
             </div>
           </div>
 
-          <!-- RGB LED Controller -->
           <div class="card">
             <div class="card-header">
               <div>
@@ -955,7 +1364,6 @@
         </div>
 
         <div class="grid-2">
-          <!-- USB Gadget Mode -->
           <div class="card">
             <div class="card-header">
               <div>
@@ -970,7 +1378,6 @@
             </div>
           </div>
 
-          <!-- Power & Maintenance -->
           <div class="card">
             <div class="card-header">
               <div>
@@ -987,7 +1394,7 @@
         </div>
       </section>
 
-      <!-- TAB 7: DIAGNOSTICS & SHELL -->
+      <!-- TAB 10: DIAGNOSTICS & SHELL -->
       <section id="tab-terminal" class="tab-pane">
         <div class="page-header">
           <div>
@@ -1045,6 +1452,9 @@
     let lastRx = 0, lastTx = 0, lastTs = 0;
     const rxHist = new Array(40).fill(0);
     const txHist = new Array(40).fill(0);
+    let portalLoadedOnce = false;
+    let portalPackages = [];
+    let cachedVouchers = [];
 
     function showToast(msg) {
       const t = document.getElementById('toast');
@@ -1060,6 +1470,7 @@
       document.getElementById('tab-' + name).classList.add('active');
       if (btn) btn.classList.add('active');
       if (name === 'sms') loadSMS();
+      if (name === 'portal') syncPortalPreview();
     }
 
     function fmtBytes(b) {
@@ -1087,6 +1498,180 @@
       }).join(' ');
       document.getElementById('line-rx').setAttribute('points', toPts(rxHist));
       document.getElementById('line-tx').setAttribute('points', toPts(txHist));
+    }
+
+    function renderClientsTable(clients) {
+      const tb = document.getElementById('clients-tbody');
+      document.getElementById('cl-count-badge').textContent = `${clients.length} perangkat`;
+      document.getElementById('top-clients-badge').textContent = `Klien: ${clients.length}`;
+      if (!clients.length) {
+        tb.innerHTML = `<tr><td colspan="8" class="card-desc">Belum ada klien WiFi / USB yang terdeteksi.</td></tr>`;
+        return;
+      }
+      tb.innerHTML = clients.map(c => {
+        const name = c.nickname ? `${c.nickname} (${c.hostname})` : (c.hostname || 'Perangkat');
+        const quotaInfo = c.voucher_code
+          ? `<span class="badge badge-sky">${c.voucher_code}</span>`
+          : (c.quota_limit_mb > 0 ? `<span class="mono">${c.quota_limit_mb} MB</span>` : `<span class="card-desc">Tanpa Batas</span>`);
+        const statusBadge = c.blocked
+          ? `<span class="badge badge-red">Diblokir</span>`
+          : `<span class="badge badge-emerald">${c.state || 'Aktif'}</span>`;
+        const blockBtn = c.blocked
+          ? `<button class="btn btn-outline btn-xs" onclick="clientAction('unblock','${c.mac}')">Buka Blokir</button>`
+          : `<button class="btn btn-danger btn-xs" onclick="clientAction('block','${c.mac}')">Blokir</button>`;
+        return `<tr>
+          <td style="font-weight:600">${name}</td>
+          <td class="mono">${c.ip || '--'} <span class="badge">${c.interface}</span></td>
+          <td class="mono">${c.mac}</td>
+          <td class="mono">${c.signal_dbm || '--'}</td>
+          <td class="mono">${fmtBytes(c.total_bytes)}</td>
+          <td>${quotaInfo}</td>
+          <td>${statusBadge}</td>
+          <td>
+            <div style="display:flex;gap:4px;flex-wrap:wrap;">
+              <button class="btn btn-outline btn-xs" onclick="selectClientForEdit('${c.mac}','${c.nickname||''}',${c.quota_limit_mb||0},'${c.voucher_code||''}')">Atur</button>
+              <button class="btn btn-outline btn-xs" onclick="clientAction('kick','${c.mac}')">Kick</button>
+              ${blockBtn}
+            </div>
+          </td>
+        </tr>`;
+      }).join('');
+    }
+
+    function renderVouchersTable(vouchers) {
+      cachedVouchers = vouchers || [];
+      const tb = document.getElementById('vouchers-tbody');
+      document.getElementById('vc-total-badge').textContent = `${cachedVouchers.length} voucher`;
+      if (!cachedVouchers.length) {
+        tb.innerHTML = `<tr><td colspan="7" class="card-desc">Belum ada voucher. Buat voucher baru di atas.</td></tr>`;
+        return;
+      }
+      const nowSec = Date.now() / 1000;
+      tb.innerHTML = cachedVouchers.map(v => {
+        const usedMB = (v.used_bytes || 0) / 1048576;
+        let quotaCell = `<span class="mono">${usedMB.toFixed(1)} MB / Unlimited</span>`;
+        if (v.quota_mb > 0) {
+          const pct = Math.min(100, Math.round((usedMB / v.quota_mb) * 100));
+          quotaCell = `<div style="min-width:130px;">
+            <div class="mono" style="font-size:12px;">${usedMB.toFixed(1)} / ${v.quota_mb} MB (${pct}%)</div>
+            <div class="progress" style="margin-top:3px;"><div class="progress-bar" style="width:${pct}%"></div></div>
+          </div>`;
+        }
+        let durStr = v.duration_mins > 0 ? `${v.duration_mins} menit` : 'Tanpa Batas';
+        if (v.expires_at > 0) {
+          const remMin = Math.max(0, Math.round((v.expires_at - nowSec) / 60));
+          durStr = remMin > 60 ? `Sisa ${Math.floor(remMin/60)}j ${remMin%60}m` : `Sisa ${remMin} menit`;
+        }
+        const macs = (v.assigned_macs || []).join(', ') || '-';
+        let badgeCls = '';
+        if (v.status === 'active') badgeCls = 'badge-emerald';
+        else if (v.status === 'expired' || v.status === 'exhausted' || v.status === 'disabled') badgeCls = 'badge-red';
+        else badgeCls = 'badge-sky';
+
+        return `<tr>
+          <td class="mono" style="font-weight:700">${v.code}</td>
+          <td>${v.label || '-'}</td>
+          <td>${quotaCell}</td>
+          <td class="mono">${durStr}</td>
+          <td class="mono" style="font-size:12px;">${macs} (${(v.assigned_macs||[]).length}/${v.max_devices||1})</td>
+          <td><span class="badge ${badgeCls}">${v.status}</span></td>
+          <td>
+            <div style="display:flex;gap:4px;flex-wrap:wrap;">
+              <button class="btn btn-outline btn-xs" onclick="voucherAction('reset','${v.code}')">Reset</button>
+              <button class="btn btn-outline btn-xs" onclick="voucherAction('toggle','${v.code}')">${v.status==='disabled'?'Aktifkan':'Nonaktifkan'}</button>
+              <button class="btn btn-danger btn-xs" onclick="voucherAction('delete','${v.code}')">Hapus</button>
+            </div>
+          </td>
+        </tr>`;
+      }).join('');
+    }
+
+    function populatePortalEditor(p) {
+      if (!p || portalLoadedOnce) return;
+      portalLoadedOnce = true;
+      document.getElementById('pe-brand').value = p.brand_name || '';
+      document.getElementById('pe-badge').value = p.badge_text || '';
+      document.getElementById('pe-title').value = p.title || '';
+      document.getElementById('pe-subtitle').value = p.subtitle || '';
+      document.getElementById('pe-btn').value = p.button_text || '';
+      document.getElementById('pe-contact').value = p.admin_contact || '';
+      document.getElementById('pe-ann').value = p.announcement || '';
+      document.getElementById('pe-color').value = p.accent_color || '#18181b';
+      document.getElementById('pe-bg').value = p.background_style || 'stone';
+      document.getElementById('pe-show-pkg').checked = p.show_packages !== false;
+      document.getElementById('pe-footer').value = p.footer_text || '';
+      document.getElementById('pe-css').value = p.custom_css || '';
+      portalPackages = Array.isArray(p.packages) ? JSON.parse(JSON.stringify(p.packages)) : [];
+      renderPortalPkgRows();
+    }
+
+    function renderPortalPkgRows() {
+      const box = document.getElementById('pe-pkg-rows');
+      box.innerHTML = portalPackages.map((k, idx) => `
+        <div style="display:grid;grid-template-columns:1.3fr 1fr 0.9fr 0.9fr auto;gap:6px;align-items:center;">
+          <input class="input" placeholder="Nama Paket" value="${k.name||''}" oninput="portalPackages[${idx}].name=this.value;syncPortalPreview()" />
+          <input class="input mono" placeholder="Harga" value="${k.price||''}" oninput="portalPackages[${idx}].price=this.value;syncPortalPreview()" />
+          <input class="input mono" placeholder="Kuota" value="${k.quota||''}" oninput="portalPackages[${idx}].quota=this.value;syncPortalPreview()" />
+          <input class="input mono" placeholder="Durasi" value="${k.duration||''}" oninput="portalPackages[${idx}].duration=this.value;syncPortalPreview()" />
+          <button class="btn btn-danger btn-xs" onclick="portalPackages.splice(${idx},1);renderPortalPkgRows();syncPortalPreview()">✕</button>
+        </div>
+      `).join('');
+    }
+
+    function addPortalPkg() {
+      portalPackages.push({name: 'Paket Baru', price: 'Rp 5.000', quota: '1 GB', duration: '24 Jam'});
+      renderPortalPkgRows();
+      syncPortalPreview();
+    }
+
+    function setPortalColor(c) {
+      document.getElementById('pe-color').value = c;
+      syncPortalPreview();
+    }
+
+    function collectPortalDesign() {
+      return {
+        brand_name: document.getElementById('pe-brand').value,
+        badge_text: document.getElementById('pe-badge').value,
+        title: document.getElementById('pe-title').value,
+        subtitle: document.getElementById('pe-subtitle').value,
+        button_text: document.getElementById('pe-btn').value,
+        admin_contact: document.getElementById('pe-contact').value,
+        announcement: document.getElementById('pe-ann').value,
+        accent_color: document.getElementById('pe-color').value,
+        background_style: document.getElementById('pe-bg').value,
+        show_packages: document.getElementById('pe-show-pkg').checked,
+        footer_text: document.getElementById('pe-footer').value,
+        custom_css: document.getElementById('pe-css').value,
+        packages: portalPackages
+      };
+    }
+
+    function syncPortalPreview() {
+      const iframe = document.getElementById('portal-iframe');
+      if (iframe && iframe.contentWindow) {
+        iframe.contentWindow.postMessage({
+          type: 'PORTAL_PREVIEW',
+          design: collectPortalDesign()
+        }, '*');
+      }
+    }
+
+    async function savePortalDesign() {
+      const design = collectPortalDesign();
+      const res = await fetch('/api/portal/design', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(design)
+      });
+      const d = await res.json();
+      if (d.ok) showToast('Desain Captive Portal berhasil disimpan!');
+    }
+
+    function togglePreviewDevice() {
+      const wrap = document.getElementById('preview-frame-wrap');
+      const isDesk = wrap.classList.toggle('desktop-mode');
+      document.getElementById('preview-mode-btn').textContent = isDesk ? '📱 Mode Layar HP' : '🖥️ Mode Layar Desktop';
     }
 
     async function refreshAll() {
@@ -1203,28 +1788,23 @@
         const rt = d.routes || {};
         document.getElementById('ov-primary-route').textContent = rt.primary_dev || '--';
         document.getElementById('ov-dns').textContent = (rt.dns_servers || []).join(', ') || '--';
-        document.getElementById('ov-watchdog').textContent = rt.watchdog_enabled ? `Aktif (${rt.watchdog_last || 'Menunggu'})` : 'Nonaktif';
+        document.getElementById('ov-watchdog').textContent = rt.watchdog_enabled ? `Aktif (${rt.watchdog_last || 'Siaga'})` : 'Nonaktif';
         document.getElementById('rt-primary').textContent = rt.primary_dev || '--';
         document.getElementById('rt-nat').textContent = rt.ip_forward ? 'Aktif (Masquerade ON)' : 'Nonaktif';
         document.getElementById('rt-table').textContent = (rt.default_routes || []).join('\n') || 'Tidak ada default route';
         if (rt.usb_gadget) {
-          document.getElementById('usb-mode-badge').textContent = rt.usb_gadget.mode || 'NCM';
           document.getElementById('hw-usb-badge').textContent = rt.usb_gadget.mode || 'NCM';
         }
 
-        // DHCP Leases
-        const lBody = document.getElementById('leases-tbody');
-        const leases = d.dhcp_leases || [];
-        if (!leases.length) {
-          lBody.innerHTML = `<tr><td colspan="4" class="card-desc">Belum ada klien DHCP aktif di usb0</td></tr>`;
-        } else {
-          lBody.innerHTML = leases.map(l => `<tr>
-            <td class="mono">${l.hostname}</td>
-            <td class="mono">${l.ip}</td>
-            <td class="mono">${l.mac}</td>
-            <td class="mono">${new Date(parseInt(l.expires)*1000).toLocaleTimeString()}</td>
-          </tr>`).join('');
+        // Hotspot & Clients & Vouchers & Portal
+        if (d.hotspot) {
+          const hsBadge = document.getElementById('hs-status-badge');
+          hsBadge.textContent = d.hotspot.active ? `Aktif (${d.hotspot.ssid})` : 'Standby (WiFi Client)';
+          hsBadge.className = 'badge ' + (d.hotspot.active ? 'badge-emerald' : '');
         }
+        renderClientsTable(d.clients || []);
+        renderVouchersTable(d.vouchers || []);
+        populatePortalEditor(d.portal);
 
         // LEDs
         const ledBox = document.getElementById('led-controls');
@@ -1243,6 +1823,135 @@
       }
     }
 
+    function selectClientForEdit(mac, nick, quota, vcode) {
+      document.getElementById('cl-mac').value = mac;
+      document.getElementById('cl-nick').value = nick;
+      document.getElementById('cl-quota').value = quota;
+      document.getElementById('cl-voucher').value = vcode;
+      showToast(`Memilih klien ${mac}`);
+    }
+
+    async function clientAction(action, mac) {
+      showToast(`Menjalankan ${action} pada ${mac}...`);
+      await fetch('/api/clients', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({action, mac})
+      });
+      refreshAll();
+    }
+
+    async function saveClientMeta() {
+      const mac = document.getElementById('cl-mac').value.trim();
+      const nickname = document.getElementById('cl-nick').value.trim();
+      const quota_mb = parseInt(document.getElementById('cl-quota').value || '0', 10);
+      if (!mac) return showToast('Masukkan MAC Address klien');
+      await fetch('/api/clients', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({action: 'update', mac, nickname, quota_mb})
+      });
+      showToast('Batas kuota & nama klien disimpan!');
+      refreshAll();
+    }
+
+    async function bindVoucherToClient() {
+      const client_mac = document.getElementById('cl-mac').value.trim();
+      const code = document.getElementById('cl-voucher').value.trim();
+      if (!client_mac || !code) return showToast('Masukkan MAC klien dan Kode Voucher');
+      const res = await fetch('/api/vouchers', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({action: 'activate', code, client_mac})
+      });
+      const d = await res.json();
+      showToast(d.ok ? `Voucher ${code} diaktifkan ke ${client_mac}` : (d.error || 'Gagal'));
+      refreshAll();
+    }
+
+    async function saveHotspot(active) {
+      const ssid = document.getElementById('hs-ssid').value.trim();
+      const password = document.getElementById('hs-pass').value;
+      const channel = parseInt(document.getElementById('hs-chan').value, 10);
+      const max_clients = parseInt(document.getElementById('hs-max').value || '10', 10);
+      showToast(active ? `Menyalakan Hotspot ${ssid}...` : 'Mematikan Hotspot...');
+      const res = await fetch('/api/hotspot', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({active, ssid, password, channel, max_clients})
+      });
+      const d = await res.json();
+      showToast(d.output || (d.ok ? 'Berhasil!' : 'Selesai'));
+      refreshAll();
+    }
+
+    function setVoucherPreset(label, quota, dur, speed) {
+      document.getElementById('vc-label').value = label;
+      document.getElementById('vc-quota').value = quota;
+      document.getElementById('vc-dur').value = dur;
+      document.getElementById('vc-speed').value = speed;
+    }
+
+    async function createVoucher(mode) {
+      let payload;
+      if (mode === 'batch') {
+        payload = {
+          action: 'batch',
+          prefix: document.getElementById('vb-prefix').value.trim(),
+          count: parseInt(document.getElementById('vb-count').value || '5', 10),
+          label: document.getElementById('vb-label').value.trim(),
+          quota_mb: parseInt(document.getElementById('vb-quota').value || '0', 10),
+          duration_mins: parseInt(document.getElementById('vb-dur').value || '0', 10),
+          max_devices: parseInt(document.getElementById('vb-maxdev').value || '1', 10)
+        };
+      } else {
+        payload = {
+          action: 'create',
+          code: document.getElementById('vc-code').value.trim(),
+          label: document.getElementById('vc-label').value.trim(),
+          quota_mb: parseInt(document.getElementById('vc-quota').value || '0', 10),
+          duration_mins: parseInt(document.getElementById('vc-dur').value || '0', 10),
+          speed_kbps: parseInt(document.getElementById('vc-speed').value || '0', 10),
+          max_devices: parseInt(document.getElementById('vc-maxdev').value || '1', 10)
+        };
+      }
+      await fetch('/api/vouchers', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify(payload)
+      });
+      document.getElementById('vc-code').value = '';
+      showToast('Voucher berhasil dibuat!');
+      refreshAll();
+    }
+
+    async function voucherAction(action, code) {
+      await fetch('/api/vouchers', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({action, code})
+      });
+      showToast(`Voucher ${code}: ${action}`);
+      refreshAll();
+    }
+
+    function printVouchers() {
+      const w = window.open('', '_blank');
+      const cards = cachedVouchers.map(v => `
+        <div style="border:1px solid #d4d4d8;border-radius:8px;padding:12px 14px;width:220px;font-family:sans-serif;">
+          <div style="font-size:11px;color:#71717a;font-weight:600;">HOTSPOT VOUCHER</div>
+          <div style="font-size:18px;font-weight:800;font-family:monospace;margin:6px 0;letter-spacing:0.05em;">${v.code}</div>
+          <div style="font-size:12px;font-weight:600;">${v.label || 'Paket Internet'}</div>
+          <div style="font-size:11px;color:#52525b;margin-top:4px;">
+            Kuota: ${v.quota_mb > 0 ? v.quota_mb + ' MB' : 'Unlimited'} ·
+            Durasi: ${v.duration_mins > 0 ? v.duration_mins + ' Menit' : 'Unlimited'}
+          </div>
+        </div>
+      `).join('');
+      w.document.write(`<html><head><title>Cetak Voucher</title></head><body style="padding:20px;display:flex;flex-wrap:wrap;gap:12px;">${cards}<script>window.print()<\/script></body></html>`);
+      w.document.close();
+    }
+
     async function modemAction(action) {
       showToast(`Menjalankan perintah modem: ${action}...`);
       const apn = document.getElementById('md-apn-input').value;
@@ -1255,11 +1964,6 @@
       const d = await res.json();
       showToast(d.ok ? `Perintah ${action} berhasil` : `Gagal: ${d.output || d.error}`);
       refreshAll();
-    }
-
-    async function setWatchdog(watchdog_on) {
-      await netControl({action: 'set_watchdog', watchdog_on});
-      showToast(`Watchdog 4G: ${watchdog_on ? 'Diaktifkan' : 'Dimatikan'}`);
     }
 
     async function loadSMS() {
@@ -1370,7 +2074,7 @@
       const ssid = document.getElementById('wifi-ssid').value.trim();
       const password = document.getElementById('wifi-pass').value;
       if (!ssid) return showToast('Masukkan nama SSID WiFi');
-      showToast(mode === 'ap' ? `Membuat Hotspot ${ssid}...` : `Menghubungkan ke WiFi ${ssid}...`);
+      showToast(`Menghubungkan ke WiFi ${ssid}...`);
       const res = await fetch('/api/wifi/connect', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},

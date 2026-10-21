@@ -1,0 +1,336 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Hotspot Login Portal</title>
+  <style id="base-style">
+    :root {
+      --bg: #fafafa;
+      --card: #ffffff;
+      --text: #09090b;
+      --muted: #71717a;
+      --border: #e4e4e7;
+      --accent: #18181b;
+      --accent-fg: #ffffff;
+      --font-sans: -apple-system, BlinkMacSystemFont, "Inter", "Segoe UI", Roboto, sans-serif;
+      --font-mono: "JetBrains Mono", "SFMono-Regular", ui-monospace, monospace;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: var(--bg);
+      color: var(--text);
+      font-family: var(--font-sans);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 20px 16px;
+      -webkit-font-smoothing: antialiased;
+    }
+    .portal-shell {
+      width: 100%;
+      max-width: 420px;
+      display: flex;
+      flex-direction: column;
+      gap: 14px;
+    }
+    .portal-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px 22px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .brand-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+    .brand-name {
+      font-weight: 700;
+      font-size: 15px;
+      letter-spacing: -0.02em;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .brand-mark {
+      width: 24px;
+      height: 24px;
+      border-radius: 6px;
+      background: var(--accent);
+      color: var(--accent-fg);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 11px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+    }
+    .badge-pill {
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 9px;
+      border-radius: 999px;
+      background: #f4f4f5;
+      border: 1px solid var(--border);
+      color: #3f3f46;
+      font-family: var(--font-mono);
+    }
+    .title {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.025em;
+      line-height: 1.25;
+    }
+    .subtitle {
+      font-size: 13px;
+      color: var(--muted);
+      line-height: 1.5;
+      margin-top: 4px;
+    }
+    .banner {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 12px;
+      font-size: 12.5px;
+      color: #3f3f46;
+      line-height: 1.45;
+    }
+    .input-code {
+      width: 100%;
+      height: 42px;
+      padding: 0 14px;
+      border-radius: 8px;
+      border: 1px solid var(--border);
+      font-family: var(--font-mono);
+      font-size: 15px;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.06em;
+      text-align: center;
+      outline: none;
+      background: #ffffff;
+      color: var(--text);
+    }
+    .input-code:focus {
+      border-color: var(--accent);
+    }
+    .btn-submit {
+      width: 100%;
+      height: 42px;
+      border-radius: 8px;
+      border: none;
+      background: var(--accent);
+      color: var(--accent-fg);
+      font-size: 13.5px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: opacity 0.12s ease;
+    }
+    .btn-submit:hover { opacity: 0.92; }
+    .pkg-grid {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .pkg-item {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: #fafafa;
+    }
+    .pkg-name { font-size: 13px; font-weight: 600; }
+    .pkg-meta { font-size: 11.5px; color: var(--muted); font-family: var(--font-mono); }
+    .pkg-price {
+      font-size: 13px;
+      font-weight: 700;
+      font-family: var(--font-mono);
+      padding: 3px 9px;
+      border-radius: 6px;
+      background: #ffffff;
+      border: 1px solid var(--border);
+    }
+    .status-box {
+      border: 1px solid #a7f3d0;
+      background: #ecfdf5;
+      color: #065f46;
+      padding: 12px 14px;
+      border-radius: 8px;
+      font-size: 12.5px;
+      display: none;
+      flex-direction: column;
+      gap: 4px;
+    }
+    .err-box {
+      border: 1px solid #fecaca;
+      background: #fef2f2;
+      color: #b91c1c;
+      padding: 10px 12px;
+      border-radius: 8px;
+      font-size: 12.5px;
+      display: none;
+    }
+    .footer {
+      text-align: center;
+      font-size: 11.5px;
+      color: var(--muted);
+      display: flex;
+      justify-content: space-between;
+      padding: 0 4px;
+    }
+  </style>
+  <style id="custom-css"></style>
+</head>
+<body>
+  <div class="portal-shell">
+    <div class="portal-card">
+      <div class="brand-row">
+        <div class="brand-name">
+          <span class="brand-mark">4G</span>
+          <span id="p-brand">Kaylaa 4G Hotspot</span>
+        </div>
+        <span class="badge-pill" id="p-badge">4G LTE WiFi</span>
+      </div>
+
+      <div>
+        <div class="title" id="p-title">Selamat Datang di Layanan Internet</div>
+        <div class="subtitle" id="p-subtitle">Masukkan kode voucher Anda untuk mulai terhubung ke internet berkecepatan tinggi.</div>
+      </div>
+
+      <div id="status-box" class="status-box"></div>
+      <div id="err-box" class="err-box"></div>
+
+      <div style="display:flex;flex-direction:column;gap:10px;">
+        <input class="input-code" id="voucher-code" placeholder="KODE-VOUCHER" onkeydown="if(event.key==='Enter')submitVoucher()" />
+        <button class="btn-submit" id="p-btn" onclick="submitVoucher()">Hubungkan ke Internet</button>
+      </div>
+
+      <div class="banner" id="p-banner">
+        <span id="p-announcement">Butuh voucher? Hubungi Admin / Kasir.</span>
+        <div style="margin-top:4px;font-weight:600;font-family:var(--font-mono);" id="p-contact">WA: 0812-3456-7890</div>
+      </div>
+
+      <div id="p-pkg-section">
+        <div style="font-size:11.5px;font-weight:600;text-transform:uppercase;letter-spacing:0.05em;color:var(--muted);margin-bottom:8px;">Daftar Paket Voucher</div>
+        <div class="pkg-grid" id="p-packages"></div>
+      </div>
+    </div>
+
+    <div class="footer">
+      <span id="p-footer">Powered by UZ801 Mainline 6.12</span>
+      <span id="p-client-info" style="font-family:var(--font-mono);">IP: --</span>
+    </div>
+  </div>
+
+  <script>
+    function renderDesign(p) {
+      if (!p) return;
+      document.documentElement.style.setProperty('--accent', p.accent_color || '#18181b');
+      const bgMap = {
+        stone: '#fafafa',
+        white: '#ffffff',
+        warm: '#fdfbf7',
+        sky: '#f0f9ff',
+        emerald: '#f0fdf4'
+      };
+      document.documentElement.style.setProperty('--bg', bgMap[p.background_style] || '#fafafa');
+      document.getElementById('p-brand').textContent = p.brand_name || 'Hotspot 4G';
+      document.getElementById('p-badge').textContent = p.badge_text || '4G LTE';
+      document.getElementById('p-title').textContent = p.title || '';
+      document.getElementById('p-subtitle').textContent = p.subtitle || '';
+      document.getElementById('p-btn').textContent = p.button_text || 'Hubungkan';
+      document.getElementById('p-announcement').textContent = p.announcement || '';
+      document.getElementById('p-contact').textContent = p.admin_contact || '';
+      document.getElementById('p-footer').textContent = p.footer_text || '';
+      document.getElementById('custom-css').textContent = p.custom_css || '';
+
+      const pkgSec = document.getElementById('p-pkg-section');
+      pkgSec.style.display = p.show_packages ? 'block' : 'none';
+      const pkgGrid = document.getElementById('p-packages');
+      pkgGrid.innerHTML = (p.packages || []).map(k => `
+        <div class="pkg-item">
+          <div>
+            <div class="pkg-name">${k.name || ''}</div>
+            <div class="pkg-meta">Kuota: ${k.quota || '-'} · Aktif: ${k.duration || '-'}</div>
+          </div>
+          <div class="pkg-price">${k.price || ''}</div>
+        </div>
+      `).join('');
+    }
+
+    function showActiveVoucher(v) {
+      const sb = document.getElementById('status-box');
+      if (!v) {
+        sb.style.display = 'none';
+        return;
+      }
+      const usedMB = ((v.used_bytes || 0) / 1048576).toFixed(1);
+      const quotaStr = v.quota_mb > 0 ? `${usedMB} / ${v.quota_mb} MB` : `${usedMB} MB (Unlimited)`;
+      let expStr = 'Unlimited';
+      if (v.expires_at > 0) {
+        const remMin = Math.max(0, Math.round((v.expires_at - Date.now()/1000) / 60));
+        expStr = remMin > 60 ? `${Math.floor(remMin/60)}j ${remMin%60}m tersisa` : `${remMin} menit tersisa`;
+      }
+      sb.style.display = 'flex';
+      sb.innerHTML = `
+        <div style="font-weight:700;">✓ Terhubung — Voucher: ${v.code}</div>
+        <div>Pemakaian Kuota: <b>${quotaStr}</b></div>
+        <div>Sisa Masa Aktif: <b>${expStr}</b></div>
+      `;
+    }
+
+    async function initPortal() {
+      try {
+        const res = await fetch('/api/portal/login');
+        const d = await res.json();
+        renderDesign(d.portal);
+        document.getElementById('p-client-info').textContent = `IP: ${d.client_ip || '--'}`;
+        if (d.voucher) showActiveVoucher(d.voucher);
+      } catch (e) {}
+    }
+
+    async function submitVoucher() {
+      const code = document.getElementById('voucher-code').value.trim();
+      const errBox = document.getElementById('err-box');
+      errBox.style.display = 'none';
+      if (!code) {
+        errBox.textContent = 'Silakan masukkan kode voucher terlebih dahulu.';
+        errBox.style.display = 'block';
+        return;
+      }
+      const res = await fetch('/api/portal/login', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({code})
+      });
+      const d = await res.json();
+      if (!d.ok) {
+        errBox.textContent = d.error || 'Gagal mengaktifkan voucher';
+        errBox.style.display = 'block';
+      } else {
+        showActiveVoucher(d.voucher);
+      }
+    }
+
+    // Listen to live preview messages from the Admin Captive Portal Editor
+    window.addEventListener('message', (ev) => {
+      if (ev.data && ev.data.type === 'PORTAL_PREVIEW') {
+        renderDesign(ev.data.design);
+      }
+    });
+
+    initPortal();
+  </script>
+</body>
+</html>

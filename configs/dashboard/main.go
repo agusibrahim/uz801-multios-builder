@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"embed"
 	"encoding/json"
 	"flag"
@@ -32,11 +33,225 @@ var (
 	lastCPUPct     float64
 	signalSetupRun bool
 
-	watchdogMu      sync.Mutex
-	watchdogEnabled = true
+	watchdogMu        sync.Mutex
+	watchdogEnabled   = true
 	watchdogLastCheck string
 	watchdogRestarts  int
+
+	storeMu   sync.Mutex
+	storePath = "/etc/uz801-hotspot-store.json"
+	appStore  = &HotspotStore{
+		HotspotConfig: HotspotConfig{
+			SSID:          "UZ801-4G-Hotspot",
+			Password:      "12345678",
+			Band:          "bg",
+			Channel:       6,
+			CaptivePortal: false,
+			MaxClients:    10,
+		},
+		Vouchers:       []*Voucher{},
+		BlockedMACs:    map[string]string{},
+		ClientNicknames: map[string]string{},
+		ClientQuotasMB:  map[string]int64{},
+		ClientUsedBytes: map[string]uint64{},
+		PortalDesign: PortalDesign{
+			BrandName:       "Kaylaa 4G Hotspot",
+			BadgeText:       "4G LTE High-Speed WiFi",
+			Title:           "Selamat Datang di Layanan Internet",
+			Subtitle:        "Masukkan kode voucher Anda untuk mulai terhubung ke internet berkecepatan tinggi.",
+			Announcement:    "Butuh voucher? Hubungi Admin / Kasir untuk pembelian kode akses.",
+			AdminContact:    "WA: 0812-3456-7890",
+			AccentColor:     "#18181b",
+			BackgroundStyle: "stone",
+			ButtonText:      "Hubungkan ke Internet",
+			FooterText:      "Powered by UZ801 Mainline 6.12",
+			ShowPackages:    true,
+			ShowTrialBtn:    false,
+			TrialMins:       15,
+			Packages: []PortalPackage{
+				{Name: "Paket Hemat 3 Jam", Price: "Rp 2.000", Quota: "500 MB", Duration: "3 Jam"},
+				{Name: "Paket Harian Puas", Price: "Rp 5.000", Quota: "2 GB", Duration: "24 Jam"},
+				{Name: "Paket Mingguan", Price: "Rp 20.000", Quota: "10 GB", Duration: "7 Hari"},
+			},
+			CustomCSS: "",
+		},
+	}
 )
+
+type PortalPackage struct {
+	Name     string `json:"name"`
+	Price    string `json:"price"`
+	Quota    string `json:"quota"`
+	Duration string `json:"duration"`
+}
+
+type PortalDesign struct {
+	BrandName       string          `json:"brand_name"`
+	BadgeText       string          `json:"badge_text"`
+	Title           string          `json:"title"`
+	Subtitle        string          `json:"subtitle"`
+	Announcement    string          `json:"announcement"`
+	AdminContact    string          `json:"admin_contact"`
+	AccentColor     string          `json:"accent_color"`
+	BackgroundStyle string          `json:"background_style"`
+	ButtonText      string          `json:"button_text"`
+	FooterText      string          `json:"footer_text"`
+	ShowPackages    bool            `json:"show_packages"`
+	ShowTrialBtn    bool            `json:"show_trial_btn"`
+	TrialMins       int             `json:"trial_mins"`
+	Packages        []PortalPackage `json:"packages"`
+	CustomCSS       string          `json:"custom_css"`
+}
+
+type HotspotConfig struct {
+	Active        bool   `json:"active"`
+	SSID          string `json:"ssid"`
+	Password      string `json:"password"`
+	Band          string `json:"band"`
+	Channel       int    `json:"channel"`
+	CaptivePortal bool   `json:"captive_portal"`
+	MaxClients    int    `json:"max_clients"`
+}
+
+type Voucher struct {
+	Code          string   `json:"code"`
+	Label         string   `json:"label"`
+	QuotaMB       int64    `json:"quota_mb"`        // 0 = unlimited
+	UsedBytes     uint64   `json:"used_bytes"`
+	DurationMins  int64    `json:"duration_mins"`   // 0 = unlimited, starts from first login
+	SpeedKbps     int      `json:"speed_kbps"`      // 0 = unlimited
+	MaxDevices    int      `json:"max_devices"`
+	Status        string   `json:"status"`          // unused | active | expired | exhausted | disabled
+	CreatedAt     string   `json:"created_at"`
+	ActivatedAt   int64    `json:"activated_at"`    // unix timestamp
+	ExpiresAt     int64    `json:"expires_at"`      // unix timestamp
+	AssignedMACs  []string `json:"assigned_macs"`
+	AssignedIPs   []string `json:"assigned_ips"`
+}
+
+type ConnectedClient struct {
+	MAC           string `json:"mac"`
+	IP            string `json:"ip"`
+	Hostname      string `json:"hostname"`
+	Nickname      string `json:"nickname"`
+	Interface     string `json:"interface"` // wlan0 | usb0
+	SignalDBm     string `json:"signal_dbm"`
+	ConnectedSec  int64  `json:"connected_sec"`
+	RxBytes       uint64 `json:"rx_bytes"`
+	TxBytes       uint64 `json:"tx_bytes"`
+	TotalBytes    uint64 `json:"total_bytes"`
+	QuotaLimitMB  int64  `json:"quota_limit_mb"`
+	VoucherCode   string `json:"voucher_code"`
+	VoucherExpiry int64  `json:"voucher_expiry"`
+	Blocked       bool   `json:"blocked"`
+	Reachable     string `json:"state"`
+}
+
+type HotspotStore struct {
+	HotspotConfig   HotspotConfig     `json:"hotspot_config"`
+	Vouchers        []*Voucher        `json:"vouchers"`
+	BlockedMACs     map[string]string `json:"blocked_macs"`
+	ClientNicknames map[string]string `json:"client_nicknames"`
+	ClientQuotasMB  map[string]int64  `json:"client_quotas_mb"`
+	ClientUsedBytes map[string]uint64 `json:"client_used_bytes"`
+	PortalDesign    PortalDesign      `json:"portal_design"`
+}
+
+func loadStore() {
+	storeMu.Lock()
+	defer storeMu.Unlock()
+	if _, err := os.Stat("/etc"); err != nil {
+		storePath = "/tmp/uz801-hotspot-store.json"
+	}
+	b, err := os.ReadFile(storePath)
+	if err != nil {
+		// Try /tmp fallback on macOS preview
+		b, err = os.ReadFile("/tmp/uz801-hotspot-store.json")
+	}
+	if err == nil && len(b) > 0 {
+		_ = json.Unmarshal(b, appStore)
+	}
+	if appStore.BlockedMACs == nil {
+		appStore.BlockedMACs = map[string]string{}
+	}
+	if appStore.ClientNicknames == nil {
+		appStore.ClientNicknames = map[string]string{}
+	}
+	if appStore.ClientQuotasMB == nil {
+		appStore.ClientQuotasMB = map[string]int64{}
+	}
+	if appStore.ClientUsedBytes == nil {
+		appStore.ClientUsedBytes = map[string]uint64{}
+	}
+	// Seed sample vouchers if empty so user immediately sees how it works
+	if len(appStore.Vouchers) == 0 {
+		now := time.Now().Format("2006-01-02 15:04")
+		appStore.Vouchers = []*Voucher{
+			{
+				Code:         "TAMU-1GB",
+				Label:        "Paket Tamu Harian",
+				QuotaMB:      1024,
+				DurationMins: 1440,
+				SpeedKbps:    5000,
+				MaxDevices:   1,
+				Status:       "unused",
+				CreatedAt:    now,
+				AssignedMACs: []string{},
+				AssignedIPs:  []string{},
+			},
+			{
+				Code:         "HEMAT-500M",
+				Label:        "Voucher 3 Jam",
+				QuotaMB:      500,
+				DurationMins: 180,
+				SpeedKbps:    2000,
+				MaxDevices:   1,
+				Status:       "unused",
+				CreatedAt:    now,
+				AssignedMACs: []string{},
+				AssignedIPs:  []string{},
+			},
+			{
+				Code:         "VIP-UNLIMITED",
+				Label:        "Akses Penuh 30 Hari",
+				QuotaMB:      0,
+				DurationMins: 43200,
+				SpeedKbps:    0,
+				MaxDevices:   3,
+				Status:       "unused",
+				CreatedAt:    now,
+				AssignedMACs: []string{},
+				AssignedIPs:  []string{},
+			},
+		}
+		saveStoreLocked()
+	}
+}
+
+func saveStoreLocked() {
+	b, err := json.MarshalIndent(appStore, "", "  ")
+	if err != nil {
+		return
+	}
+	if err := os.WriteFile(storePath, b, 0644); err != nil {
+		_ = os.WriteFile("/tmp/uz801-hotspot-store.json", b, 0644)
+	}
+}
+
+func genCode(prefix string, length int) string {
+	const chars = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
+	buf := make([]byte, length)
+	_, _ = rand.Read(buf)
+	var sb strings.Builder
+	if prefix != "" {
+		sb.WriteString(prefix)
+		sb.WriteString("-")
+	}
+	for i := 0; i < length; i++ {
+		sb.WriteByte(chars[int(buf[i])%len(chars)])
+	}
+	return sb.String()
+}
 
 func runCmd(timeout time.Duration, name string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
@@ -319,7 +534,11 @@ func getCPUInfo() map[string]any {
 
 func getDHCPLeases() []map[string]string {
 	var leases []map[string]string
-	for _, path := range []string{"/run/dnsmasq-usb0.leases", "/tmp/dhcp.leases", "/var/lib/misc/dnsmasq.leases"} {
+	paths := []string{"/run/dnsmasq-usb0.leases", "/tmp/dhcp.leases", "/var/lib/misc/dnsmasq.leases"}
+	nmLeases, _ := filepath.Glob("/var/lib/NetworkManager/dnsmasq-*.leases")
+	paths = append(paths, nmLeases...)
+	seen := map[string]bool{}
+	for _, path := range paths {
 		raw := readFileTrim(path)
 		if raw == "" {
 			continue
@@ -327,17 +546,180 @@ func getDHCPLeases() []map[string]string {
 		for _, line := range strings.Split(raw, "\n") {
 			f := strings.Fields(line)
 			if len(f) >= 4 {
+				mac := strings.ToLower(f[1])
+				if seen[mac] {
+					continue
+				}
+				seen[mac] = true
 				leases = append(leases, map[string]string{
 					"expires":  f[0],
-					"mac":      f[1],
+					"mac":      mac,
 					"ip":       f[2],
 					"hostname": f[3],
 				})
 			}
 		}
-		break
 	}
 	return leases
+}
+
+// Discover all connected clients across WiFi AP/STA and USB, with signal, bytes, and voucher status
+func discoverConnectedClients() []ConnectedClient {
+	leases := getDHCPLeases()
+	byMAC := map[string]*ConnectedClient{}
+	for _, l := range leases {
+		mac := strings.ToLower(l["mac"])
+		ifname := "usb0"
+		if !strings.HasPrefix(l["ip"], "192.168.42.") {
+			ifname = "wlan0"
+		}
+		byMAC[mac] = &ConnectedClient{
+			MAC:       mac,
+			IP:        l["ip"],
+			Hostname:  l["hostname"],
+			Interface: ifname,
+			Reachable: "LEASED",
+		}
+	}
+
+	// Merge ip neigh show
+	neighOut, _ := runCmd(2*time.Second, "ip", "neigh", "show")
+	for _, line := range strings.Split(neighOut, "\n") {
+		f := strings.Fields(line)
+		// e.g. 192.168.42.184 dev usb0 lladdr aa:bb:cc:dd:ee:ff REACHABLE
+		if len(f) >= 5 {
+			ip := f[0]
+			if strings.Contains(ip, ":") {
+				continue // skip IPv6 link-local for primary display
+			}
+			var dev, mac, state string
+			for i := 1; i < len(f); i++ {
+				if f[i] == "dev" && i+1 < len(f) {
+					dev = f[i+1]
+				} else if f[i] == "lladdr" && i+1 < len(f) {
+					mac = strings.ToLower(f[i+1])
+				}
+			}
+			state = f[len(f)-1]
+			if mac == "" || dev == "wwan0" {
+				continue
+			}
+			c, ok := byMAC[mac]
+			if !ok {
+				c = &ConnectedClient{
+					MAC:       mac,
+					IP:        ip,
+					Hostname:  "*",
+					Interface: dev,
+				}
+				byMAC[mac] = c
+			}
+			if c.IP == "" {
+				c.IP = ip
+			}
+			if dev != "" {
+				c.Interface = dev
+			}
+			c.Reachable = state
+		}
+	}
+
+	// Merge WiFi stations from iw dev wlan0 station dump
+	iwOut, err := runCmd(2*time.Second, "iw", "dev", "wlan0", "station", "dump")
+	if err == nil && iwOut != "" {
+		var cur *ConnectedClient
+		for _, line := range strings.Split(iwOut, "\n") {
+			line = strings.TrimSpace(line)
+			if strings.HasPrefix(line, "Station ") {
+				f := strings.Fields(line)
+				if len(f) >= 2 {
+					mac := strings.ToLower(f[1])
+					c, ok := byMAC[mac]
+					if !ok {
+						c = &ConnectedClient{
+							MAC:       mac,
+							Hostname:  "WiFi-Client",
+							Interface: "wlan0",
+							Reachable: "ASSOC",
+						}
+						byMAC[mac] = c
+					}
+					cur = c
+				}
+			} else if cur != nil {
+				if strings.HasPrefix(line, "signal:") {
+					cur.SignalDBm = strings.TrimSpace(strings.TrimPrefix(line, "signal:"))
+				} else if strings.HasPrefix(line, "rx bytes:") {
+					v, _ := strconv.ParseUint(strings.TrimSpace(strings.TrimPrefix(line, "rx bytes:")), 10, 64)
+					cur.RxBytes = v
+				} else if strings.HasPrefix(line, "tx bytes:") {
+					v, _ := strconv.ParseUint(strings.TrimSpace(strings.TrimPrefix(line, "tx bytes:")), 10, 64)
+					cur.TxBytes = v
+				} else if strings.HasPrefix(line, "connected time:") {
+					f := strings.Fields(strings.TrimPrefix(line, "connected time:"))
+					if len(f) >= 1 {
+						cur.ConnectedSec, _ = strconv.ParseInt(f[0], 10, 64)
+					}
+				}
+			}
+		}
+	}
+
+	// Read iptables accounting per IP if available
+	iptOut, _ := runCmd(2*time.Second, "iptables", "-L", "FORWARD", "-v", "-n", "-x")
+	ipBytes := map[string]uint64{}
+	for _, line := range strings.Split(iptOut, "\n") {
+		f := strings.Fields(line)
+		if len(f) >= 9 {
+			b, err := strconv.ParseUint(f[1], 10, 64)
+			if err == nil && b > 0 {
+				src := f[7]
+				dst := f[8]
+				if src != "0.0.0.0/0" {
+					ipBytes[src] += b
+				}
+				if dst != "0.0.0.0/0" {
+					ipBytes[dst] += b
+				}
+			}
+		}
+	}
+
+	storeMu.Lock()
+	defer storeMu.Unlock()
+
+	var result []ConnectedClient
+	for _, c := range byMAC {
+		c.TotalBytes = c.RxBytes + c.TxBytes
+		if c.IP != "" && ipBytes[c.IP] > c.TotalBytes {
+			c.TotalBytes = ipBytes[c.IP]
+		}
+		if savedUsed := appStore.ClientUsedBytes[c.MAC]; savedUsed > c.TotalBytes {
+			c.TotalBytes = savedUsed
+		} else if c.TotalBytes > savedUsed {
+			appStore.ClientUsedBytes[c.MAC] = c.TotalBytes
+		}
+		c.Nickname = appStore.ClientNicknames[c.MAC]
+		c.QuotaLimitMB = appStore.ClientQuotasMB[c.MAC]
+		_, c.Blocked = appStore.BlockedMACs[c.MAC]
+
+		// Match voucher assigned to this MAC or IP
+		for _, v := range appStore.Vouchers {
+			for _, m := range v.AssignedMACs {
+				if strings.EqualFold(m, c.MAC) {
+					c.VoucherCode = v.Code
+					c.VoucherExpiry = v.ExpiresAt
+					if v.QuotaMB > 0 {
+						c.QuotaLimitMB = v.QuotaMB
+					}
+					break
+				}
+			}
+		}
+		result = append(result, *c)
+	}
+	sort.Slice(result, func(i, j int) bool { return result[i].IP < result[j].IP })
+	return result
 }
 
 func getDNSServers() []string {
@@ -471,7 +853,6 @@ func getModemStatus() map[string]any {
 	simPath := extractKV(out, "modem.generic.sim")
 	bearerPath := extractKV(out, "modem.generic.bearers.value[1]")
 
-	// Detailed LTE RF metrics
 	rsrp := ""
 	rsrq := ""
 	rssi := ""
@@ -550,6 +931,13 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 	}
 	loadAvg := readFileTrim("/proc/loadavg")
 	mem := getMemoryInfo()
+	clients := discoverConnectedClients()
+
+	storeMu.Lock()
+	hsCfg := appStore.HotspotConfig
+	vouchers := appStore.Vouchers
+	portalCfg := appStore.PortalDesign
+	storeMu.Unlock()
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"timestamp":   time.Now().Format(time.RFC3339),
@@ -569,7 +957,395 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 		"leds":        getLEDs(),
 		"routes":      getRoutesAndNAT(),
 		"dhcp_leases": getDHCPLeases(),
+		"clients":     clients,
+		"hotspot":     hsCfg,
+		"vouchers":    vouchers,
+		"portal":      portalCfg,
 	})
+}
+
+// Client management: kick, block, unblock, set nickname/quota
+func applyMACBlock(mac string, block bool) {
+	mac = strings.ToLower(strings.TrimSpace(mac))
+	if mac == "" {
+		return
+	}
+	if block {
+		_, _ = runCmd(2*time.Second, "iptables", "-D", "FORWARD", "-m", "mac", "--mac-source", mac, "-j", "DROP")
+		_, _ = runCmd(2*time.Second, "iptables", "-I", "FORWARD", "1", "-m", "mac", "--mac-source", mac, "-j", "DROP")
+		_, _ = runCmd(2*time.Second, "iw", "dev", "wlan0", "station", "del", mac)
+	} else {
+		_, _ = runCmd(2*time.Second, "iptables", "-D", "FORWARD", "-m", "mac", "--mac-source", mac, "-j", "DROP")
+	}
+}
+
+func handleClientsAction(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusOK, map[string]any{"clients": discoverConnectedClients()})
+		return
+	}
+	var req struct {
+		Action   string `json:"action"` // kick | block | unblock | update | reset_usage
+		MAC      string `json:"mac"`
+		IP       string `json:"ip"`
+		Nickname string `json:"nickname"`
+		QuotaMB  int64  `json:"quota_mb"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid body"})
+		return
+	}
+	mac := strings.ToLower(strings.TrimSpace(req.MAC))
+
+	storeMu.Lock()
+	switch req.Action {
+	case "kick":
+		if mac != "" {
+			_, _ = runCmd(3*time.Second, "iw", "dev", "wlan0", "station", "del", mac)
+			// Brief 5-second forward drop to force TCP/HTTP disconnect even on USB/WiFi
+			go func(m string) {
+				_, _ = runCmd(2*time.Second, "iptables", "-I", "FORWARD", "1", "-m", "mac", "--mac-source", m, "-j", "DROP")
+				time.Sleep(5 * time.Second)
+				_, _ = runCmd(2*time.Second, "iptables", "-D", "FORWARD", "-m", "mac", "--mac-source", m, "-j", "DROP")
+			}(mac)
+		}
+	case "block":
+		if mac != "" {
+			appStore.BlockedMACs[mac] = time.Now().Format("2006-01-02 15:04")
+			saveStoreLocked()
+			go applyMACBlock(mac, true)
+		}
+	case "unblock":
+		if mac != "" {
+			delete(appStore.BlockedMACs, mac)
+			saveStoreLocked()
+			go applyMACBlock(mac, false)
+		}
+	case "update":
+		if mac != "" {
+			if req.Nickname != "" {
+				appStore.ClientNicknames[mac] = req.Nickname
+			}
+			appStore.ClientQuotasMB[mac] = req.QuotaMB
+			saveStoreLocked()
+		}
+	case "reset_usage":
+		if mac != "" {
+			delete(appStore.ClientUsedBytes, mac)
+			saveStoreLocked()
+		}
+	}
+	storeMu.Unlock()
+
+	// Setup per-IP iptables accounting rule if IP given
+	if req.IP != "" {
+		_, _ = runCmd(2*time.Second, "iptables", "-C", "FORWARD", "-s", req.IP)
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "clients": discoverConnectedClients()})
+}
+
+// Voucher CRUD & Activation API
+func handleVouchers(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		storeMu.Lock()
+		v := appStore.Vouchers
+		storeMu.Unlock()
+		writeJSON(w, http.StatusOK, map[string]any{"vouchers": v})
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": "method not allowed"})
+		return
+	}
+	var req struct {
+		Action       string `json:"action"` // create | batch | delete | reset | toggle | activate
+		Code         string `json:"code"`
+		Prefix       string `json:"prefix"`
+		Count        int    `json:"count"`
+		Label        string `json:"label"`
+		QuotaMB      int64  `json:"quota_mb"`
+		DurationMins int64  `json:"duration_mins"`
+		SpeedKbps    int    `json:"speed_kbps"`
+		MaxDevices   int    `json:"max_devices"`
+		ClientMAC    string `json:"client_mac"`
+		ClientIP     string `json:"client_ip"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid body"})
+		return
+	}
+
+	storeMu.Lock()
+	defer storeMu.Unlock()
+
+	nowStr := time.Now().Format("2006-01-02 15:04")
+	if req.MaxDevices <= 0 {
+		req.MaxDevices = 1
+	}
+
+	switch req.Action {
+	case "create":
+		code := strings.ToUpper(strings.TrimSpace(req.Code))
+		if code == "" {
+			code = genCode("UZ", 5)
+		}
+		v := &Voucher{
+			Code:         code,
+			Label:        req.Label,
+			QuotaMB:      req.QuotaMB,
+			DurationMins: req.DurationMins,
+			SpeedKbps:    req.SpeedKbps,
+			MaxDevices:   req.MaxDevices,
+			Status:       "unused",
+			CreatedAt:    nowStr,
+			AssignedMACs: []string{},
+			AssignedIPs:  []string{},
+		}
+		appStore.Vouchers = append([]*Voucher{v}, appStore.Vouchers...)
+		saveStoreLocked()
+
+	case "batch":
+		cnt := req.Count
+		if cnt <= 0 || cnt > 50 {
+			cnt = 5
+		}
+		pref := strings.ToUpper(strings.TrimSpace(req.Prefix))
+		if pref == "" {
+			pref = "VCR"
+		}
+		for i := 0; i < cnt; i++ {
+			v := &Voucher{
+				Code:         genCode(pref, 5),
+				Label:        req.Label,
+				QuotaMB:      req.QuotaMB,
+				DurationMins: req.DurationMins,
+				SpeedKbps:    req.SpeedKbps,
+				MaxDevices:   req.MaxDevices,
+				Status:       "unused",
+				CreatedAt:    nowStr,
+				AssignedMACs: []string{},
+				AssignedIPs:  []string{},
+			}
+			appStore.Vouchers = append([]*Voucher{v}, appStore.Vouchers...)
+		}
+		saveStoreLocked()
+
+	case "delete":
+		var kept []*Voucher
+		for _, v := range appStore.Vouchers {
+			if !strings.EqualFold(v.Code, req.Code) {
+				kept = append(kept, v)
+			}
+		}
+		appStore.Vouchers = kept
+		saveStoreLocked()
+
+	case "reset":
+		for _, v := range appStore.Vouchers {
+			if strings.EqualFold(v.Code, req.Code) {
+				v.UsedBytes = 0
+				v.Status = "unused"
+				v.ActivatedAt = 0
+				v.ExpiresAt = 0
+				for _, m := range v.AssignedMACs {
+					delete(appStore.BlockedMACs, m)
+					go applyMACBlock(m, false)
+				}
+				v.AssignedMACs = []string{}
+				v.AssignedIPs = []string{}
+				break
+			}
+		}
+		saveStoreLocked()
+
+	case "toggle":
+		for _, v := range appStore.Vouchers {
+			if strings.EqualFold(v.Code, req.Code) {
+				if v.Status == "disabled" {
+					v.Status = "unused"
+					for _, m := range v.AssignedMACs {
+						delete(appStore.BlockedMACs, m)
+						go applyMACBlock(m, false)
+					}
+				} else {
+					v.Status = "disabled"
+					for _, m := range v.AssignedMACs {
+						appStore.BlockedMACs[m] = nowStr
+						go applyMACBlock(m, true)
+					}
+				}
+				break
+			}
+		}
+		saveStoreLocked()
+
+	case "activate":
+		// Assign a voucher code to a client MAC/IP & start timer
+		var found *Voucher
+		for _, v := range appStore.Vouchers {
+			if strings.EqualFold(v.Code, strings.TrimSpace(req.Code)) {
+				found = v
+				break
+			}
+		}
+		if found == nil {
+			writeJSON(w, http.StatusNotFound, map[string]any{"ok": false, "error": "Kode voucher tidak ditemukan"})
+			return
+		}
+		if found.Status == "disabled" || found.Status == "expired" || found.Status == "exhausted" {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "Voucher sudah " + found.Status})
+			return
+		}
+		mac := strings.ToLower(strings.TrimSpace(req.ClientMAC))
+		if mac != "" {
+			already := false
+			for _, m := range found.AssignedMACs {
+				if m == mac {
+					already = true
+					break
+				}
+			}
+			if !already && len(found.AssignedMACs) >= found.MaxDevices {
+				writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": fmt.Sprintf("Batas perangkat voucher tercapai (%d perangkat)", found.MaxDevices)})
+				return
+			}
+			if !already {
+				found.AssignedMACs = append(found.AssignedMACs, mac)
+			}
+			delete(appStore.BlockedMACs, mac)
+			go applyMACBlock(mac, false)
+		}
+		if req.ClientIP != "" {
+			found.AssignedIPs = append(found.AssignedIPs, req.ClientIP)
+		}
+		if found.ActivatedAt == 0 {
+			nowUnix := time.Now().Unix()
+			found.ActivatedAt = nowUnix
+			if found.DurationMins > 0 {
+				found.ExpiresAt = nowUnix + (found.DurationMins * 60)
+			}
+		}
+		found.Status = "active"
+		saveStoreLocked()
+	}
+
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "vouchers": appStore.Vouchers})
+}
+
+func handleHotspotConfig(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		storeMu.Lock()
+		cfg := appStore.HotspotConfig
+		storeMu.Unlock()
+		writeJSON(w, http.StatusOK, cfg)
+		return
+	}
+	var req HotspotConfig
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid body"})
+		return
+	}
+	storeMu.Lock()
+	if req.SSID != "" {
+		appStore.HotspotConfig.SSID = req.SSID
+	}
+	if req.Password != "" {
+		appStore.HotspotConfig.Password = req.Password
+	}
+	if req.Channel > 0 {
+		appStore.HotspotConfig.Channel = req.Channel
+	}
+	if req.MaxClients > 0 {
+		appStore.HotspotConfig.MaxClients = req.MaxClients
+	}
+	appStore.HotspotConfig.CaptivePortal = req.CaptivePortal
+	appStore.HotspotConfig.Active = req.Active
+	cfg := appStore.HotspotConfig
+	saveStoreLocked()
+	storeMu.Unlock()
+
+	var out string
+	var err error
+	if cfg.Active {
+		_ = os.WriteFile("/proc/sys/net/ipv4/ip_forward", []byte("1"), 0644)
+		_, _ = runCmd(3*time.Second, "iptables", "-t", "nat", "-A", "POSTROUTING", "-o", "wwan0", "-j", "MASQUERADE")
+		out, err = runCmd(20*time.Second, "nmcli", "dev", "wifi", "hotspot", "ifname", "wlan0", "ssid", cfg.SSID, "password", cfg.Password)
+	} else {
+		out, err = runCmd(10*time.Second, "nmcli", "connection", "down", "Hotspot")
+		_, _ = runCmd(10*time.Second, "nmcli", "connection", "up", "wlan")
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"ok": err == nil, "output": out, "hotspot": cfg})
+}
+
+// Background Voucher & Client Quota / Expiry Enforcer (runs every 10 seconds)
+func startVoucherEnforcer() {
+	go func() {
+		for {
+			time.Sleep(10 * time.Second)
+			clients := discoverConnectedClients()
+			clientBytesByMAC := map[string]uint64{}
+			for _, c := range clients {
+				clientBytesByMAC[c.MAC] = c.TotalBytes
+			}
+
+			nowUnix := time.Now().Unix()
+			storeMu.Lock()
+			changed := false
+
+			// 1. Check per-client direct quota limits
+			for mac, limitMB := range appStore.ClientQuotasMB {
+				if limitMB > 0 {
+					used := clientBytesByMAC[mac]
+					if used >= uint64(limitMB)*1048576 {
+						if _, blocked := appStore.BlockedMACs[mac]; !blocked {
+							appStore.BlockedMACs[mac] = "Quota Exhausted"
+							changed = true
+							go applyMACBlock(mac, true)
+						}
+					}
+				}
+			}
+
+			// 2. Check active vouchers (duration expiry + byte quota)
+			for _, v := range appStore.Vouchers {
+				if v.Status != "active" {
+					continue
+				}
+				var sumBytes uint64
+				for _, m := range v.AssignedMACs {
+					sumBytes += clientBytesByMAC[strings.ToLower(m)]
+				}
+				if sumBytes > v.UsedBytes {
+					v.UsedBytes = sumBytes
+					changed = true
+				}
+				// Check time expiry
+				if v.ExpiresAt > 0 && nowUnix >= v.ExpiresAt {
+					v.Status = "expired"
+					changed = true
+					for _, m := range v.AssignedMACs {
+						appStore.BlockedMACs[m] = "Voucher Expired"
+						go applyMACBlock(m, true)
+					}
+				}
+				// Check quota exhaustion
+				if v.QuotaMB > 0 && v.UsedBytes >= uint64(v.QuotaMB)*1048576 {
+					v.Status = "exhausted"
+					changed = true
+					for _, m := range v.AssignedMACs {
+						appStore.BlockedMACs[m] = "Voucher Quota Exhausted"
+						go applyMACBlock(m, true)
+					}
+				}
+			}
+
+			if changed {
+				saveStoreLocked()
+			}
+			storeMu.Unlock()
+		}
+	}()
 }
 
 type SMSMessage struct {
@@ -832,11 +1608,11 @@ func handleNetworkControl(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var req struct {
-		Action     string   `json:"action"` // prefer_lte | prefer_wifi | toggle_nat | set_dns | set_usb | set_watchdog
+		Action     string   `json:"action"`
 		EnableNAT  bool     `json:"enable_nat"`
 		OutIf      string   `json:"out_if"`
 		DNS        []string `json:"dns"`
-		USBMode    string   `json:"usb_mode"` // ncm | rndis | otg_on | otg_off
+		USBMode    string   `json:"usb_mode"`
 		WatchdogOn bool     `json:"watchdog_on"`
 	}
 	_ = json.NewDecoder(r.Body).Decode(&req)
@@ -940,6 +1716,12 @@ func handleWiFiConnect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if req.Mode == "ap" {
+		storeMu.Lock()
+		appStore.HotspotConfig.SSID = req.SSID
+		appStore.HotspotConfig.Password = req.Password
+		appStore.HotspotConfig.Active = true
+		saveStoreLocked()
+		storeMu.Unlock()
 		_ = os.WriteFile("/proc/sys/net/ipv4/ip_forward", []byte("1"), 0644)
 		_, _ = runCmd(3*time.Second, "iptables", "-t", "nat", "-A", "POSTROUTING", "-o", "wwan0", "-j", "MASQUERADE")
 		out, err := runCmd(20*time.Second, "nmcli", "dev", "wifi", "hotspot", "ifname", "wlan0", "ssid", req.SSID, "password", req.Password)
@@ -1040,6 +1822,150 @@ func handleSystemAction(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+func handlePortalDesign(w http.ResponseWriter, r *http.Request) {
+	if r.Method == http.MethodGet {
+		storeMu.Lock()
+		p := appStore.PortalDesign
+		storeMu.Unlock()
+		writeJSON(w, http.StatusOK, p)
+		return
+	}
+	if r.Method != http.MethodPost {
+		writeJSON(w, http.StatusMethodNotAllowed, map[string]any{"error": "method not allowed"})
+		return
+	}
+	var req PortalDesign
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid body"})
+		return
+	}
+	storeMu.Lock()
+	appStore.PortalDesign = req
+	saveStoreLocked()
+	storeMu.Unlock()
+	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "portal": req})
+}
+
+func handlePortalLogin(w http.ResponseWriter, r *http.Request) {
+	remoteIP, _, _ := net.SplitHostPort(r.RemoteAddr)
+	if remoteIP == "" {
+		remoteIP = r.RemoteAddr
+	}
+	// Resolve MAC from discovered clients
+	clients := discoverConnectedClients()
+	clientMAC := ""
+	for _, c := range clients {
+		if c.IP == remoteIP {
+			clientMAC = c.MAC
+			break
+		}
+	}
+
+	if r.Method == http.MethodGet {
+		// Return current client's active voucher status + portal design
+		storeMu.Lock()
+		portalCfg := appStore.PortalDesign
+		var activeVoucher *Voucher
+		for _, v := range appStore.Vouchers {
+			for _, m := range v.AssignedMACs {
+				if clientMAC != "" && strings.EqualFold(m, clientMAC) {
+					activeVoucher = v
+					break
+				}
+			}
+			for _, ip := range v.AssignedIPs {
+				if ip == remoteIP {
+					activeVoucher = v
+					break
+				}
+			}
+		}
+		storeMu.Unlock()
+		writeJSON(w, http.StatusOK, map[string]any{
+			"client_ip":  remoteIP,
+			"client_mac": clientMAC,
+			"portal":     portalCfg,
+			"voucher":    activeVoucher,
+		})
+		return
+	}
+
+	var req struct {
+		Code string `json:"code"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || strings.TrimSpace(req.Code) == "" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "Masukkan kode voucher"})
+		return
+	}
+
+	storeMu.Lock()
+	defer storeMu.Unlock()
+
+	code := strings.TrimSpace(req.Code)
+	var found *Voucher
+	for _, v := range appStore.Vouchers {
+		if strings.EqualFold(v.Code, code) {
+			found = v
+			break
+		}
+	}
+	if found == nil {
+		writeJSON(w, http.StatusNotFound, map[string]any{"ok": false, "error": "Kode voucher tidak valid atau tidak ditemukan"})
+		return
+	}
+	if found.Status == "disabled" || found.Status == "expired" || found.Status == "exhausted" {
+		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "Status voucher ini: " + found.Status})
+		return
+	}
+
+	if clientMAC != "" {
+		already := false
+		for _, m := range found.AssignedMACs {
+			if strings.EqualFold(m, clientMAC) {
+				already = true
+				break
+			}
+		}
+		if !already && found.MaxDevices > 0 && len(found.AssignedMACs) >= found.MaxDevices {
+			writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": fmt.Sprintf("Voucher sudah mencapai batas maksimal %d perangkat", found.MaxDevices)})
+			return
+		}
+		if !already {
+			found.AssignedMACs = append(found.AssignedMACs, clientMAC)
+		}
+		delete(appStore.BlockedMACs, clientMAC)
+		go applyMACBlock(clientMAC, false)
+	}
+	if remoteIP != "" {
+		alreadyIP := false
+		for _, ip := range found.AssignedIPs {
+			if ip == remoteIP {
+				alreadyIP = true
+				break
+			}
+		}
+		if !alreadyIP {
+			found.AssignedIPs = append(found.AssignedIPs, remoteIP)
+		}
+	}
+	if found.ActivatedAt == 0 {
+		nowUnix := time.Now().Unix()
+		found.ActivatedAt = nowUnix
+		if found.DurationMins > 0 {
+			found.ExpiresAt = nowUnix + (found.DurationMins * 60)
+		}
+	}
+	found.Status = "active"
+	saveStoreLocked()
+
+	writeJSON(w, http.StatusOK, map[string]any{
+		"ok":         true,
+		"client_ip":  remoteIP,
+		"client_mac": clientMAC,
+		"voucher":    found,
+	})
+}
+
 func start4GWatchdog() {
 	go func() {
 		for {
@@ -1073,11 +1999,18 @@ func main() {
 	addr := flag.String("addr", "", "HTTP listen address (default: :80 with fallback to :8080)")
 	flag.Parse()
 
+	loadStore()
 	sampleCPU()
 	start4GWatchdog()
+	startVoucherEnforcer()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/status", handleStatus)
+	mux.HandleFunc("/api/clients", handleClientsAction)
+	mux.HandleFunc("/api/vouchers", handleVouchers)
+	mux.HandleFunc("/api/hotspot", handleHotspotConfig)
+	mux.HandleFunc("/api/portal/design", handlePortalDesign)
+	mux.HandleFunc("/api/portal/login", handlePortalLogin)
 	mux.HandleFunc("/api/sms", handleSMSList)
 	mux.HandleFunc("/api/sms/send", handleSMSSend)
 	mux.HandleFunc("/api/sms/delete", handleSMSDelete)
@@ -1096,7 +2029,17 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	mux.Handle("/", http.FileServer(http.FS(subFS)))
+	fileServer := http.FileServer(http.FS(subFS))
+	mux.HandleFunc("/portal", func(w http.ResponseWriter, r *http.Request) {
+		b, err := staticEmbed.ReadFile("static/portal.html")
+		if err != nil {
+			http.Error(w, "portal not found", 404)
+			return
+		}
+		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		_, _ = w.Write(b)
+	})
+	mux.Handle("/", fileServer)
 
 	var ln net.Listener
 	if *addr != "" {
