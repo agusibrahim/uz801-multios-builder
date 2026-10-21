@@ -814,20 +814,26 @@
                 <input class="input" id="hs-ssid" value="UZ801-4G-Hotspot" />
               </div>
               <div>
-                <label class="label">Password WPA2 (Min. 8 Karakter)</label>
-                <input class="input mono" id="hs-pass" value="12345678" />
-              </div>
-              <div>
-                <label class="label">Channel 2.4GHz</label>
-                <select class="select mono" id="hs-chan">
-                  <option value="1">Channel 1 (2412 MHz)</option>
-                  <option value="6" selected>Channel 6 (2437 MHz)</option>
-                  <option value="11">Channel 11 (2462 MHz)</option>
+                <label class="label">Keamanan WiFi</label>
+                <select class="select" id="hs-sec" onchange="onHotspotSecChange()">
+                  <option value="open">🔓 Open / Tanpa Password (Voucher)</option>
+                  <option value="wpa2" selected>🔒 WPA2-PSK (Pakai Password)</option>
                 </select>
               </div>
+              <div id="hs-pass-wrap">
+                <label class="label">Password WPA2 (Min. 8 Karakter)</label>
+                <input class="input mono" id="hs-pass" value="12345678" placeholder="Kosongkan untuk Open WiFi" />
+              </div>
               <div>
-                <label class="label">Maksimal Klien</label>
-                <input class="input mono" type="number" id="hs-max" value="10" />
+                <label class="label">Channel 2.4GHz & Maks Klien</label>
+                <div style="display:grid;grid-template-columns:1.2fr 0.8fr;gap:6px;">
+                  <select class="select mono" id="hs-chan">
+                    <option value="1">Ch 1</option>
+                    <option value="6" selected>Ch 6</option>
+                    <option value="11">Ch 11</option>
+                  </select>
+                  <input class="input mono" type="number" id="hs-max" value="10" title="Maksimal Klien" />
+                </div>
               </div>
             </div>
             <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;cursor:pointer;margin-top:2px;">
@@ -835,8 +841,9 @@
               Wajibkan Login Kode Voucher (Captive Portal & Kunci Internet Sebelum Login)
             </label>
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
-              <button class="btn btn-primary" onclick="saveHotspot(true)">Nyalakan MiFi Hotspot</button>
-              <button class="btn btn-outline" onclick="saveHotspot(false)">Matikan Hotspot (Kembali ke WiFi Client)</button>
+              <button class="btn btn-primary" onclick="saveHotspot(true)">💾 Simpan & Update Hotspot</button>
+              <button class="btn btn-outline" onclick=" document.getElementById('hs-sec').value='open'; onHotspotSecChange(); saveHotspot(true);">🔓 Jadikan Open Hotspot (Tanpa Password)</button>
+              <button class="btn btn-danger" onclick="saveHotspot(false)">Matikan Hotspot</button>
             </div>
           </div>
 
@@ -1457,6 +1464,7 @@
     const rxHist = new Array(40).fill(0);
     const txHist = new Array(40).fill(0);
     let portalLoadedOnce = false;
+    let hotspotLoadedOnce = false;
     let portalPackages = [];
     let cachedVouchers = [];
 
@@ -1812,8 +1820,19 @@
         // Hotspot & Clients & Vouchers & Portal
         if (d.hotspot) {
           const hsBadge = document.getElementById('hs-status-badge');
-          hsBadge.textContent = d.hotspot.active ? `Aktif (${d.hotspot.ssid})` : 'Standby (WiFi Client)';
+          const secLabel = d.hotspot.password ? 'WPA2' : 'OPEN';
+          hsBadge.textContent = d.hotspot.active ? `Aktif: ${d.hotspot.ssid} (${secLabel})` : 'Standby (WiFi Client)';
           hsBadge.className = 'badge ' + (d.hotspot.active ? 'badge-emerald' : '');
+          if (!hotspotLoadedOnce) {
+            hotspotLoadedOnce = true;
+            document.getElementById('hs-ssid').value = d.hotspot.ssid || 'UZ801-4G-Hotspot';
+            document.getElementById('hs-pass').value = d.hotspot.password || '';
+            document.getElementById('hs-sec').value = d.hotspot.password ? 'wpa2' : 'open';
+            document.getElementById('hs-chan').value = d.hotspot.channel || 6;
+            document.getElementById('hs-max').value = d.hotspot.max_clients || 10;
+            document.getElementById('hs-captive').checked = d.hotspot.captive_portal !== false;
+            onHotspotSecChange();
+          }
         }
         renderClientsTable(d.clients || []);
         renderVouchersTable(d.vouchers || []);
@@ -1882,20 +1901,37 @@
       refreshAll();
     }
 
+    function onHotspotSecChange() {
+      const sec = document.getElementById('hs-sec').value;
+      const passInput = document.getElementById('hs-pass');
+      if (sec === 'open') {
+        passInput.value = '';
+        passInput.disabled = true;
+        passInput.placeholder = 'Tanpa Password (Open WiFi)';
+      } else {
+        passInput.disabled = false;
+        passInput.placeholder = 'Minimal 8 karakter';
+      }
+    }
+
     async function saveHotspot(active) {
       const ssid = document.getElementById('hs-ssid').value.trim();
-      const password = document.getElementById('hs-pass').value;
+      const sec = document.getElementById('hs-sec').value;
+      const password = sec === 'open' ? '' : document.getElementById('hs-pass').value.trim();
+      if (active && sec === 'wpa2' && password.length > 0 && password.length < 8) {
+        return showToast('Password WPA2 minimal 8 karakter (atau pilih mode Open / Tanpa Password)');
+      }
       const channel = parseInt(document.getElementById('hs-chan').value, 10);
       const max_clients = parseInt(document.getElementById('hs-max').value || '10', 10);
       const captive_portal = document.getElementById('hs-captive').checked;
-      showToast(active ? `Menyalakan Hotspot ${ssid}...` : 'Mematikan Hotspot...');
+      showToast(active ? `Menyimpan & mengaktifkan Hotspot ${ssid} (${sec.toUpperCase()})...` : 'Mematikan Hotspot...');
       const res = await fetch('/api/hotspot', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
         body: JSON.stringify({active, ssid, password, channel, max_clients, captive_portal})
       });
       const d = await res.json();
-      showToast(d.output || (d.ok ? 'Berhasil!' : 'Selesai'));
+      showToast(d.ok ? `Hotspot ${ssid} berhasil diperbarui!` : (d.output || 'Gagal memperbarui hotspot'));
       refreshAll();
     }
 

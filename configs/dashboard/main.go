@@ -1504,9 +1504,7 @@ func handleHotspotConfig(w http.ResponseWriter, r *http.Request) {
 	if req.SSID != "" {
 		appStore.HotspotConfig.SSID = req.SSID
 	}
-	if req.Password != "" {
-		appStore.HotspotConfig.Password = req.Password
-	}
+	appStore.HotspotConfig.Password = strings.TrimSpace(req.Password)
 	if req.Channel > 0 {
 		appStore.HotspotConfig.Channel = req.Channel
 	}
