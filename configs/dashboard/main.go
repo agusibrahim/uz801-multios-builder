@@ -495,18 +495,18 @@ func getMemoryInfo() map[string]uint64 {
 }
 
 func getDiskInfo() map[string]any {
-	out, _ := runCmd(2*time.Second, "df", "-B1", "/")
+	out, _ := runCmd(2*time.Second, "df", "-k", "/")
 	lines := strings.Split(out, "\n")
 	if len(lines) >= 2 {
 		f := strings.Fields(lines[len(lines)-1])
 		if len(f) >= 5 {
-			tot, _ := strconv.ParseUint(f[1], 10, 64)
-			used, _ := strconv.ParseUint(f[2], 10, 64)
-			avail, _ := strconv.ParseUint(f[3], 10, 64)
+			totKB, _ := strconv.ParseUint(f[1], 10, 64)
+			usedKB, _ := strconv.ParseUint(f[2], 10, 64)
+			availKB, _ := strconv.ParseUint(f[3], 10, 64)
 			return map[string]any{
-				"total_bytes": tot,
-				"used_bytes":  used,
-				"avail_bytes": avail,
+				"total_bytes": totKB * 1024,
+				"used_bytes":  usedKB * 1024,
+				"avail_bytes": availKB * 1024,
 				"use_pct":     strings.TrimSuffix(f[4], "%"),
 			}
 		}
@@ -801,11 +801,14 @@ func getRoutesAndNAT() map[string]any {
 }
 
 func extractKV(kvOut, key string) string {
-	prefix := key + " :"
 	for _, line := range strings.Split(kvOut, "\n") {
-		line = strings.TrimSpace(line)
-		if strings.HasPrefix(line, prefix) {
-			val := strings.TrimSpace(strings.TrimPrefix(line, prefix))
+		idx := strings.Index(line, ":")
+		if idx <= 0 {
+			continue
+		}
+		k := strings.TrimSpace(line[:idx])
+		if k == key {
+			val := strings.TrimSpace(line[idx+1:])
 			if val != "--" {
 				return val
 			}
@@ -851,7 +854,6 @@ func getModemStatus() map[string]any {
 	powerState := extractKV(out, "modem.generic.power-state")
 	ownNum := extractKV(out, "modem.generic.own-numbers.value[1]")
 	simPath := extractKV(out, "modem.generic.sim")
-	bearerPath := extractKV(out, "modem.generic.bearers.value[1]")
 
 	rsrp := ""
 	rsrq := ""
@@ -879,16 +881,31 @@ func getModemStatus() map[string]any {
 	bearerIP := ""
 	bearerGW := ""
 	bearerDNS := ""
-	bearerAPN := ""
+	bearerAPN := extractKV(out, "modem.3gpp.eps.initial-bearer.settings.apn")
 	bearerUptime := ""
-	if bearerPath != "" {
-		bOut, err := runCmd(2*time.Second, "mmcli", "-b", bearerPath, "-K")
-		if err == nil {
-			bearerAPN = extractKV(bOut, "bearer.properties.apn")
-			bearerIP = extractKV(bOut, "bearer.ipv4-config.address")
-			bearerGW = extractKV(bOut, "bearer.ipv4-config.gateway")
-			bearerDNS = extractKV(bOut, "bearer.ipv4-config.dns.value[1]")
-			bearerUptime = extractKV(bOut, "bearer.stats.duration")
+	for i := 1; i <= 5; i++ {
+		bp := extractKV(out, fmt.Sprintf("modem.generic.bearers.value[%d]", i))
+		if bp == "" {
+			continue
+		}
+		bOut, err := runCmd(2*time.Second, "mmcli", "-b", bp, "-K")
+		if err != nil {
+			continue
+		}
+		apn := extractKV(bOut, "bearer.properties.apn")
+		ip := extractKV(bOut, "bearer.ipv4-config.address")
+		gw := extractKV(bOut, "bearer.ipv4-config.gateway")
+		dns := extractKV(bOut, "bearer.ipv4-config.dns.value[1]")
+		dur := extractKV(bOut, "bearer.stats.duration")
+		if apn != "" {
+			bearerAPN = apn
+		}
+		if ip != "" {
+			bearerIP = ip
+			bearerGW = gw
+			bearerDNS = dns
+			bearerUptime = dur
+			break
 		}
 	}
 
@@ -1465,12 +1482,18 @@ func handleUSSD(w http.ResponseWriter, r *http.Request) {
 		out, _ := runCmd(5*time.Second, "mmcli", "-m", "0", "--3gpp-ussd-cancel")
 		writeJSON(w, http.StatusOK, map[string]any{"ok": true, "output": out})
 	case "respond":
-		out, err := runCmd(20*time.Second, "mmcli", "-m", "0", "--3gpp-ussd-respond="+req.Code)
+		out, err := runCmd(10*time.Second, "mmcli", "-m", "0", "--3gpp-ussd-respond="+req.Code)
+		if err != nil && out == "" {
+			out = "Timeout: Operator seluler (4G LTE-only tanpa jaringan 3G/VoLTE) tidak merespons sesi USSD."
+		}
 		writeJSON(w, http.StatusOK, map[string]any{"ok": err == nil, "output": out})
 	default:
-		_, _ = runCmd(3*time.Second, "mmcli", "-m", "0", "--3gpp-ussd-cancel")
-		out, err := runCmd(20*time.Second, "mmcli", "-m", "0", "--3gpp-ussd-initiate="+req.Code)
-		writeJSON(w, http.StatusOK, map[string]any{"ok": err == nil, "output": out})
+		_, _ = runCmd(2*time.Second, "mmcli", "-m", "0", "--3gpp-ussd-cancel")
+		out, err := runCmd(10*time.Second, "mmcli", "-m", "0", "--3gpp-ussd-initiate="+req.Code)
+		if err != nil {
+			out = out + "\n\n[Info]: Pada jaringan 4G LTE-only (seperti Telkomsel/by.U setelah jaringan 3G dimatikan), panggilan USSD (*888#/*363#) tidak didukung oleh operator melalui jalur data LTE tanpa VoLTE/2G. Gunakan fitur Kotak Masuk SMS & OTP di sebelah kiri untuk membaca/mengirim SMS."
+		}
+		writeJSON(w, http.StatusOK, map[string]any{"ok": err == nil, "output": strings.TrimSpace(out)})
 	}
 }
 
@@ -1996,6 +2019,10 @@ func start4GWatchdog() {
 }
 
 func main() {
+	_ = os.Setenv("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
+	_ = os.Setenv("LC_ALL", "C")
+	_ = os.Chdir("/")
+
 	addr := flag.String("addr", "", "HTTP listen address (default: :80 with fallback to :8080)")
 	flag.Parse()
 
