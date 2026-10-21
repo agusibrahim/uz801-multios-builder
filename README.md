@@ -1,3 +1,5 @@
+> 🌐 **Bahasa / Language:** **[🇬🇧 English](README_EN.md)** | **🇮🇩 Bahasa Indonesia**
+
 # OpenStick UZ801 v3.0 (MSM8916) — Multi-OS Linux Builder & EDL Flasher
 
 Builder dan flasher mandiri untuk menjalankan **4 distribusi Linux Mainline 64-bit (`aarch64`, Kernel `6.12.1-msm8916`)** pada modem USB 4G LTE **Yiming UZ801 v3.0 (Qualcomm Snapdragon 410 / MSM8916)** langsung dari **macOS (Apple Silicon via Docker/OrbStack)** maupun Linux.
@@ -11,7 +13,7 @@ Seluruh image OS yang dihasilkan sudah terkonfigurasi otomatis (*out-of-the-box*
 - **Power-Cut Safe `/etc/fstab` & Time Sync** — tahan cabut-pasang langsung tanpa korupsi filesystem dan otomatis menyinkronkan waktu via HTTP/NTP (mengatasi ketiadaan baterai RTC pada dongle).
 
 > 📖 **Ingin mem-porting OS lain atau mempelajari detail arsitektur & troubleshooting?**
-> Baca dokumentasi teknis lengkap di **[`UZ801_OS_PORTING_GUIDE.md`](UZ801_OS_PORTING_GUIDE.md)**.
+> Baca dokumentasi teknis lengkap di **[`UZ801_OS_PORTING_GUIDE.md`](UZ801_OS_PORTING_GUIDE.md)** ([🇬🇧 English version](UZ801_OS_PORTING_GUIDE_EN.md)).
 
 ---
 
