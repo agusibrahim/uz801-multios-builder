@@ -320,6 +320,12 @@
         errBox.style.display = 'block';
       } else {
         showActiveVoucher(d.voucher);
+        // Trigger Android / iOS / Windows Captive Portal auto-dismiss probe
+        if (window.self === window.top) {
+          setTimeout(() => {
+            window.location.href = 'http://connectivitycheck.gstatic.com/generate_204';
+          }, 900);
+        }
       }
     }
 

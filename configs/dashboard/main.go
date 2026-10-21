@@ -666,12 +666,12 @@ func discoverConnectedClients() []ConnectedClient {
 		}
 	}
 
-	// Read iptables accounting per IP if available
-	iptOut, _ := runCmd(2*time.Second, "iptables", "-L", "FORWARD", "-v", "-n", "-x")
+	// Read iptables accounting per IP from UZ801_CAPTIVE & FORWARD
+	iptOut, _ := runCmd(2*time.Second, "iptables", "-L", "UZ801_CAPTIVE", "-v", "-n", "-x")
 	ipBytes := map[string]uint64{}
 	for _, line := range strings.Split(iptOut, "\n") {
 		f := strings.Fields(line)
-		if len(f) >= 9 {
+		if len(f) >= 9 && f[2] == "ACCEPT" {
 			b, err := strconv.ParseUint(f[1], 10, 64)
 			if err == nil && b > 0 {
 				src := f[7]
@@ -992,64 +992,125 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Synchronize iptables Captive Portal Walled Garden & MAC Block rules on wlan0
+// Synchronize iptables Captive Portal Walled Garden (IP-based) & nftables Bandwidth Limiter (uz801_qos)
 func syncCaptiveFirewall() {
+	// Map MAC -> IP from DHCP leases & ARP table
+	macToIP := map[string]string{}
+	for _, l := range getDHCPLeases() {
+		macToIP[strings.ToLower(l["mac"])] = l["ip"]
+	}
+	neighOut, _ := runCmd(2*time.Second, "ip", "neigh", "show")
+	for _, line := range strings.Split(neighOut, "\n") {
+		f := strings.Fields(line)
+		if len(f) >= 5 && !strings.Contains(f[0], ":") {
+			for i := 1; i < len(f)-1; i++ {
+				if f[i] == "lladdr" {
+					macToIP[strings.ToLower(f[i+1])] = f[0]
+				}
+			}
+		}
+	}
+
 	storeMu.Lock()
 	captiveOn := appStore.HotspotConfig.CaptivePortal
-	var authorizedMACs []string
+	authorizedIPs := map[string]bool{}
+	speedLimitByIP := map[string]int{} // ip -> speed_kbps
+
 	for _, v := range appStore.Vouchers {
 		if v.Status == "active" {
 			for _, m := range v.AssignedMACs {
-				authorizedMACs = append(authorizedMACs, strings.ToLower(strings.TrimSpace(m)))
+				if ip := macToIP[strings.ToLower(strings.TrimSpace(m))]; ip != "" {
+					authorizedIPs[ip] = true
+					if v.SpeedKbps > 0 {
+						speedLimitByIP[ip] = v.SpeedKbps
+					}
+				}
+			}
+			for _, ip := range v.AssignedIPs {
+				if ip != "" {
+					authorizedIPs[ip] = true
+					if v.SpeedKbps > 0 {
+						speedLimitByIP[ip] = v.SpeedKbps
+					}
+				}
 			}
 		}
 	}
 	for mac, q := range appStore.ClientQuotasMB {
 		if q > 0 {
-			authorizedMACs = append(authorizedMACs, strings.ToLower(strings.TrimSpace(mac)))
+			if ip := macToIP[strings.ToLower(strings.TrimSpace(mac))]; ip != "" {
+				authorizedIPs[ip] = true
+			}
 		}
 	}
-	var blockedMACs []string
+	blockedIPs := map[string]bool{}
 	for mac := range appStore.BlockedMACs {
-		blockedMACs = append(blockedMACs, strings.ToLower(strings.TrimSpace(mac)))
+		if ip := macToIP[strings.ToLower(strings.TrimSpace(mac))]; ip != "" {
+			blockedIPs[ip] = true
+		}
 	}
 	storeMu.Unlock()
 
+	// Clean up any duplicate jump rules in FORWARD and PREROUTING
 	_, _ = runCmd(2*time.Second, "iptables", "-N", "UZ801_CAPTIVE")
 	_, _ = runCmd(2*time.Second, "iptables", "-F", "UZ801_CAPTIVE")
-	_, _ = runCmd(2*time.Second, "iptables", "-D", "FORWARD", "-j", "UZ801_CAPTIVE")
+	for i := 0; i < 5; i++ {
+		if _, err := runCmd(1*time.Second, "iptables", "-D", "FORWARD", "-j", "UZ801_CAPTIVE"); err != nil {
+			break
+		}
+	}
 	_, _ = runCmd(2*time.Second, "iptables", "-I", "FORWARD", "1", "-j", "UZ801_CAPTIVE")
 
 	_, _ = runCmd(2*time.Second, "iptables", "-t", "nat", "-N", "UZ801_CAPTIVE_NAT")
 	_, _ = runCmd(2*time.Second, "iptables", "-t", "nat", "-F", "UZ801_CAPTIVE_NAT")
-	_, _ = runCmd(2*time.Second, "iptables", "-t", "nat", "-D", "PREROUTING", "-j", "UZ801_CAPTIVE_NAT")
+	for i := 0; i < 5; i++ {
+		if _, err := runCmd(1*time.Second, "iptables", "-t", "nat", "-D", "PREROUTING", "-j", "UZ801_CAPTIVE_NAT"); err != nil {
+			break
+		}
+	}
 	_, _ = runCmd(2*time.Second, "iptables", "-t", "nat", "-I", "PREROUTING", "1", "-j", "UZ801_CAPTIVE_NAT")
 
-	// 1. Explicitly blocked MACs are always rejected first
-	for _, mac := range blockedMACs {
-		if mac != "" {
-			_, _ = runCmd(2*time.Second, "iptables", "-A", "UZ801_CAPTIVE", "-m", "mac", "--mac-source", mac, "-j", "REJECT")
+	// 1. Explicitly blocked client IPs are always rejected first
+	for ip := range blockedIPs {
+		_, _ = runCmd(2*time.Second, "iptables", "-A", "UZ801_CAPTIVE", "-s", ip, "-j", "REJECT")
+		_, _ = runCmd(2*time.Second, "iptables", "-A", "UZ801_CAPTIVE", "-d", ip, "-j", "REJECT")
+	}
+
+	// 2. Authorized voucher IPs bypass captive NAT redirect and are allowed to forward (with RX/TX byte counters)
+	for ip := range authorizedIPs {
+		if blockedIPs[ip] {
+			continue
+		}
+		_, _ = runCmd(2*time.Second, "iptables", "-t", "nat", "-A", "UZ801_CAPTIVE_NAT", "-i", "wlan0", "-s", ip, "-j", "RETURN")
+		_, _ = runCmd(2*time.Second, "iptables", "-A", "UZ801_CAPTIVE", "-i", "wlan0", "-s", ip, "-j", "ACCEPT")
+		_, _ = runCmd(2*time.Second, "iptables", "-A", "UZ801_CAPTIVE", "-o", "wlan0", "-d", ip, "-j", "ACCEPT")
+	}
+
+	if captiveOn {
+		// 3. Unauthenticated wlan0 clients: allow DNS (53), redirect HTTP (80) to 192.168.43.1:80, reject all other forwarding
+		_, _ = runCmd(2*time.Second, "iptables", "-t", "nat", "-A", "UZ801_CAPTIVE_NAT", "-i", "wlan0", "-p", "udp", "--dport", "53", "-j", "REDIRECT", "--to-ports", "53")
+		_, _ = runCmd(2*time.Second, "iptables", "-t", "nat", "-A", "UZ801_CAPTIVE_NAT", "-i", "wlan0", "-p", "tcp", "--dport", "80", "-j", "DNAT", "--to-destination", "192.168.43.1:80")
+		_, _ = runCmd(2*time.Second, "iptables", "-A", "UZ801_CAPTIVE", "-i", "wlan0", "-p", "udp", "--dport", "53", "-j", "ACCEPT")
+		_, _ = runCmd(2*time.Second, "iptables", "-A", "UZ801_CAPTIVE", "-i", "wlan0", "-p", "tcp", "--dport", "53", "-j", "ACCEPT")
+		_, _ = runCmd(2*time.Second, "iptables", "-A", "UZ801_CAPTIVE", "-i", "wlan0", "-j", "REJECT")
+	}
+
+	// 4. Synchronize per-IP bandwidth rate limits via nftables (nft_limit)
+	_, _ = runCmd(2*time.Second, "modprobe", "nft_limit")
+	_, _ = runCmd(2*time.Second, "nft", "delete", "table", "ip", "uz801_qos")
+	if len(speedLimitByIP) > 0 {
+		_, _ = runCmd(2*time.Second, "nft", "add", "table", "ip", "uz801_qos")
+		_, _ = runCmd(2*time.Second, "nft", "add chain ip uz801_qos forward { type filter hook forward priority -10 ; policy accept ; }")
+		for ip, kbps := range speedLimitByIP {
+			kbytes := kbps / 8
+			if kbytes < 8 {
+				kbytes = 8
+			}
+			burst := kbytes * 2
+			_, _ = runCmd(2*time.Second, "nft", fmt.Sprintf("add rule ip uz801_qos forward ip daddr %s limit rate over %d kbytes/second burst %d kbytes drop", ip, kbytes, burst))
+			_, _ = runCmd(2*time.Second, "nft", fmt.Sprintf("add rule ip uz801_qos forward ip saddr %s limit rate over %d kbytes/second burst %d kbytes drop", ip, kbytes, burst))
 		}
 	}
-
-	if !captiveOn {
-		return
-	}
-
-	// 2. Authorized voucher MACs bypass captive redirect and are allowed to forward
-	for _, mac := range authorizedMACs {
-		if mac != "" {
-			_, _ = runCmd(2*time.Second, "iptables", "-t", "nat", "-A", "UZ801_CAPTIVE_NAT", "-i", "wlan0", "-m", "mac", "--mac-source", mac, "-j", "RETURN")
-			_, _ = runCmd(2*time.Second, "iptables", "-A", "UZ801_CAPTIVE", "-i", "wlan0", "-m", "mac", "--mac-source", mac, "-j", "ACCEPT")
-		}
-	}
-
-	// 3. Unauthenticated wlan0 clients: allow DNS (53), redirect HTTP (80) to 192.168.43.1:80, reject all other forwarding
-	_, _ = runCmd(2*time.Second, "iptables", "-t", "nat", "-A", "UZ801_CAPTIVE_NAT", "-i", "wlan0", "-p", "udp", "--dport", "53", "-j", "REDIRECT", "--to-ports", "53")
-	_, _ = runCmd(2*time.Second, "iptables", "-t", "nat", "-A", "UZ801_CAPTIVE_NAT", "-i", "wlan0", "-p", "tcp", "--dport", "80", "-j", "DNAT", "--to-destination", "192.168.43.1:80")
-	_, _ = runCmd(2*time.Second, "iptables", "-A", "UZ801_CAPTIVE", "-i", "wlan0", "-p", "udp", "--dport", "53", "-j", "ACCEPT")
-	_, _ = runCmd(2*time.Second, "iptables", "-A", "UZ801_CAPTIVE", "-i", "wlan0", "-p", "tcp", "--dport", "53", "-j", "ACCEPT")
-	_, _ = runCmd(2*time.Second, "iptables", "-A", "UZ801_CAPTIVE", "-i", "wlan0", "-j", "REJECT")
 }
 
 func isClientAuthorized(remoteIP string) bool {
@@ -2095,7 +2156,6 @@ func handlePortalLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	storeMu.Lock()
-	defer storeMu.Unlock()
 
 	code := strings.TrimSpace(req.Code)
 	var found *Voucher
@@ -2106,10 +2166,12 @@ func handlePortalLogin(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 	if found == nil {
+		storeMu.Unlock()
 		writeJSON(w, http.StatusNotFound, map[string]any{"ok": false, "error": "Kode voucher tidak valid atau tidak ditemukan"})
 		return
 	}
 	if found.Status == "disabled" || found.Status == "expired" || found.Status == "exhausted" {
+		storeMu.Unlock()
 		writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": "Status voucher ini: " + found.Status})
 		return
 	}
@@ -2123,6 +2185,7 @@ func handlePortalLogin(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 		if !already && found.MaxDevices > 0 && len(found.AssignedMACs) >= found.MaxDevices {
+			storeMu.Unlock()
 			writeJSON(w, http.StatusBadRequest, map[string]any{"ok": false, "error": fmt.Sprintf("Voucher sudah mencapai batas maksimal %d perangkat", found.MaxDevices)})
 			return
 		}
@@ -2130,7 +2193,6 @@ func handlePortalLogin(w http.ResponseWriter, r *http.Request) {
 			found.AssignedMACs = append(found.AssignedMACs, clientMAC)
 		}
 		delete(appStore.BlockedMACs, clientMAC)
-		go applyMACBlock(clientMAC, false)
 	}
 	if remoteIP != "" {
 		alreadyIP := false
@@ -2153,7 +2215,10 @@ func handlePortalLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	found.Status = "active"
 	saveStoreLocked()
-	go syncCaptiveFirewall()
+	storeMu.Unlock()
+
+	// Synchronously update iptables & nftables QoS BEFORE returning response so phone CPD probe immediately succeeds!
+	syncCaptiveFirewall()
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":         true,
