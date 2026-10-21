@@ -2,7 +2,7 @@
 
 # OpenStick UZ801 v3.0 (MSM8916) — Multi-OS Linux Builder & EDL Flasher
 
-Builder dan flasher mandiri untuk menjalankan **9 distribusi Linux Mainline 64-bit (`aarch64`, Kernel `6.12.1-msm8916`)** pada modem USB 4G LTE **Yiming UZ801 v3.0 (Qualcomm Snapdragon 410 / MSM8916)** langsung dari **macOS (Apple Silicon via Docker/OrbStack)** maupun Linux.
+Builder dan flasher mandiri untuk menjalankan **10 distribusi Linux Mainline 64-bit (`aarch64`, Kernel `6.12.1-msm8916`)** pada modem USB 4G LTE **Yiming UZ801 v3.0 (Qualcomm Snapdragon 410 / MSM8916)** langsung dari **macOS (Apple Silicon via Docker/OrbStack)** maupun Linux.
 
 Seluruh image OS yang dihasilkan sudah terkonfigurasi otomatis (*out-of-the-box*) dengan:
 - **ADB Over USB (`adbd` FunctionFS)** — langsung terdeteksi di `adb devices` dan bisa `adb shell` (akses `root` instan tanpa jaringan).
@@ -32,6 +32,7 @@ Keempat image OS berikut sudah di-build, diuji langsung di hardware UZ801 v3.0, 
 | **7** | **Chimera Linux** | `chimera-rootfs.img.gz` (`81 MB`) | `dinit` | `musl` (FreeBSD + LLVM) | `apk` (v3) | **~86 MB** | Distro modern non-GNU dengan userland **FreeBSD**, compiler **LLVM/Clang**, dan init **`dinit`** |
 | **8** | **postmarketOS v25.06** | `pmos-rootfs.img.gz` (`99 MB`) | `OpenRC` | `musl` | `apk` (pmOS + Alpine) | **~52 MB** | Distro mobile Linux asli untuk Qualcomm MSM8916 (`postmarketos-base` console) |
 | **9** | **Kali Linux Rolling** | `kali-rootfs.img.gz` (`132 MB`) | `systemd` | `glibc` (+ `musl`) | `apt` (`kali-rolling`) | **~79 MB** | **Pocket 4G Pentest Drop-Box** (`nmap`, `tcpdump`, `aircrack-ng`, `ncat`, `socat`, `proxychains4`) |
+| **10** | **AlmaLinux 9.8** | `alma-rootfs.img.gz` (`137 MB`) | `systemd` | `glibc` (+ `musl`) | `dnf` / `rpm` | **~83 MB** | Distro **Enterprise RHEL 9 (`dnf`/`rpm`)** stabil ("Olive Jaguar") |
 
 ---
 
@@ -111,6 +112,7 @@ Gunakan mode ini jika dongle sudah pernah di-flash dengan skema partisi project 
 ./flash.sh chimera       # Flash Chimera Linux
 ./flash.sh pmos          # Flash postmarketOS v25.06
 ./flash.sh kali          # Flash Kali Linux Rolling
+./flash.sh alma          # Flash AlmaLinux 9.8
 ```
 
 #### B. Mode Full (Flash GPT + Bootloader + Radio EFS + `boot` + `rootfs`)
@@ -204,4 +206,5 @@ make build-ubuntu        # Menghasilkan files/ubuntu-rootfs.img.gz
 make build-chimera       # Menghasilkan files/chimera-rootfs.img.gz
 make build-pmos          # Menghasilkan files/pmos-rootfs.img.gz
 make build-kali          # Menghasilkan files/kali-rootfs.img.gz
+make build-alma          # Menghasilkan files/alma-rootfs.img.gz
 ```

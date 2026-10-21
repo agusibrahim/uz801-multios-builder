@@ -41,7 +41,8 @@ if [[ -z "$OS_CHOICE" ]]; then
     echo "  [7] Chimera Linux        (dinit + FreeBSD Userland + LLVM)"
     echo "  [8] postmarketOS v25.06  (OpenRC + musl Mobile Linux)"
     echo "  [9] Kali Linux Rolling   (systemd + Pocket 4G Pentest Drop-Box)"
-    read -rp "Pilihan [1-9] (Default: 1): " num
+    echo "  [10] AlmaLinux 9.8       (systemd + glibc + dnf/rpm Enterprise)"
+    read -rp "Pilihan [1-10] (Default: 1): " num
     case "${num:-1}" in
         1) OS_CHOICE="alpine" ;;
         2) OS_CHOICE="void" ;;
@@ -52,6 +53,7 @@ if [[ -z "$OS_CHOICE" ]]; then
         7) OS_CHOICE="chimera" ;;
         8) OS_CHOICE="pmos" ;;
         9) OS_CHOICE="kali" ;;
+        10) OS_CHOICE="alma" ;;
         *) echo "[-] Pilihan tidak valid"; exit 1 ;;
     esac
 fi
@@ -66,8 +68,9 @@ case "$OS_CHOICE" in
     chimera)     ROOTFS_GZ="$FILES_DIR/chimera-rootfs.img.gz" ;;
     pmos|postmarketos) ROOTFS_GZ="$FILES_DIR/pmos-rootfs.img.gz" ;;
     kali)        ROOTFS_GZ="$FILES_DIR/kali-rootfs.img.gz" ;;
+    alma|almalinux) ROOTFS_GZ="$FILES_DIR/alma-rootfs.img.gz" ;;
     *)
-        echo "[-] Unknown OS: $OS_CHOICE (choose: alpine, void, arch, dietpi, immortalwrt, ubuntu, chimera, pmos, kali)"
+        echo "[-] Unknown OS: $OS_CHOICE (choose: alpine, void, arch, dietpi, immortalwrt, ubuntu, chimera, pmos, kali, alma)"
         exit 1
         ;;
 esac

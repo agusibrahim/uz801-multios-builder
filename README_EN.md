@@ -2,7 +2,7 @@
 
 # OpenStick UZ801 v3.0 (MSM8916) — Multi-OS Linux Builder & EDL Flasher
 
-A self-contained builder and EDL flasher for running **9 Mainline 64-bit Linux distributions (`aarch64`, Kernel `6.12.1-msm8916`)** on the **Yiming UZ801 v3.0 (Qualcomm Snapdragon 410 / MSM8916)** 4G LTE USB Modem Stick directly from **macOS (Apple Silicon via Docker/OrbStack)** or Linux.
+A self-contained builder and EDL flasher for running **10 Mainline 64-bit Linux distributions (`aarch64`, Kernel `6.12.1-msm8916`)** on the **Yiming UZ801 v3.0 (Qualcomm Snapdragon 410 / MSM8916)** 4G LTE USB Modem Stick directly from **macOS (Apple Silicon via Docker/OrbStack)** or Linux.
 
 Every OS image built by this project comes pre-configured **out-of-the-box** with:
 - **ADB Over USB (`adbd` FunctionFS)** — immediately detected by `adb devices` with direct `root` access via `adb shell` (even without network/IP).
@@ -32,6 +32,7 @@ All 4 OS images have been built, tested live on UZ801 v3.0 hardware, and are ava
 | **7** | **Chimera Linux** | `chimera-rootfs.img.gz` (`81 MB`) | `dinit` | `musl` (FreeBSD + LLVM) | `apk` (v3) | **~86 MB** | Modern non-GNU distro with **FreeBSD userland**, **LLVM/Clang** toolchain, and **`dinit`** init |
 | **8** | **postmarketOS v25.06** | `pmos-rootfs.img.gz` (`99 MB`) | `OpenRC` | `musl` | `apk` (pmOS + Alpine) | **~52 MB** | Native mobile Linux distribution for Qualcomm MSM8916 (`postmarketos-base` console) |
 | **9** | **Kali Linux Rolling** | `kali-rootfs.img.gz` (`132 MB`) | `systemd` | `glibc` (+ `musl`) | `apt` (`kali-rolling`) | **~79 MB** | **Pocket 4G Pentest Drop-Box** (`nmap`, `tcpdump`, `aircrack-ng`, `ncat`, `socat`, `proxychains4`) |
+| **10** | **AlmaLinux 9.8** | `alma-rootfs.img.gz` (`137 MB`) | `systemd` | `glibc` (+ `musl`) | `dnf` / `rpm` | **~83 MB** | **Enterprise RHEL 9 (`dnf`/`rpm`)** distribution ("Olive Jaguar") |
 
 ---
 
@@ -112,6 +113,7 @@ Use this mode if the dongle is already partitioned with this project's GPT layou
 ./flash.sh chimera       # Flash Chimera Linux
 ./flash.sh pmos          # Flash postmarketOS v25.06
 ./flash.sh kali          # Flash Kali Linux Rolling
+./flash.sh alma          # Flash AlmaLinux 9.8
 ```
 
 #### B. Full Mode (Flashes GPT + Bootloader + Radio EFS Backup/Restore + `boot` + `rootfs`)
@@ -206,4 +208,5 @@ make build-ubuntu        # Outputs files/ubuntu-rootfs.img.gz
 make build-chimera       # Outputs files/chimera-rootfs.img.gz
 make build-pmos          # Outputs files/pmos-rootfs.img.gz
 make build-kali          # Outputs files/kali-rootfs.img.gz
+make build-alma          # Outputs files/alma-rootfs.img.gz
 ```
