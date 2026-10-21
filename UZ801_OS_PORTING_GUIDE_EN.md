@@ -157,3 +157,10 @@ Total eMMC sectors: `7634944` (`0x748000`).
 - Do **not** mount `/dev/mmcblk0p13` onto `/boot` in `/etc/fstab` so `/boot/dietpi` on the rootfs stays intact.
 - Write `2` to `/boot/dietpi/.install_stage` and `21` (`Native PC (aarch64)`) to `/etc/.dietpi_hw_model_identifier`.
 - Install `systemd-timesyncd` and perform an initial HTTP `Date:` header clock sync (`curl -sI http://1.1.1.1`) in `uz801-init.sh` so HTTPS repositories (`deb.debian.org` and `dietpi.com`) never fail SSL certificate validation on cold boot.
+
+### 5. ImmortalWrt 24.10.6 Mainline (`procd` + `LuCI Argon Web UI`) — `scripts/build-immortalwrt.sh`
+- **Creating `/dev/disk/by-partlabel/*` for `rmtfs`**: Because OpenWrt's `procd` does not run `eudev`, `/dev/disk/by-partlabel/` is not created automatically. `/etc/init.d/uz801-init` parses `DEVNAME` and `PARTNAME` from `/sys/block/mmcblk0/mmcblk0p*/uevent` to populate `/dev/disk/by-partlabel/*` before starting `rmtfs -P -r -s`.
+- **Reporting Kernel Events to `ModemManager` (`--without-udev`)**: OpenWrt compiles `ModemManager` without `libgudev` and relies on `mmcli --report-kernel-event`. `uz801-init` reports all `/sys/class/wwan/*`, `/sys/class/net/wwan*`, and `/sys/class/rpmsg/*` devices to `ModemManager`, connects the bearer (`mmcli -m 0 --simple-connect="apn=byu,ip-type=ipv4"`), and applies the bearer IPv4 address and route to `wwan0`.
+- **WiFi `mac80211` Auto-Detection (`wifi config`)**: Runs `wifi config` once `wcn36xx` creates `phy0` so OpenWrt auto-detects the exact `remoteproc` sysfs path before configuring `default_radio0` as a `sta` client.
+- **`dnsmasq --user=root` on `usb0`**: Passes `--user=root` to `dnsmasq` in `usb-gadget.sh` so DHCP leases in `/run/dnsmasq-usb0.leases` work seamlessly across all 5 distributions.
+

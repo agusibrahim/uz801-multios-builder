@@ -1,21 +1,23 @@
-.PHONY: help build-alpine build-void build-arch build-dietpi \
-        flash-alpine flash-void flash-arch flash-dietpi flash-full
+.PHONY: help build-alpine build-void build-arch build-dietpi build-immortalwrt \
+        flash-alpine flash-void flash-arch flash-dietpi flash-immortalwrt flash-full
 
 help:
 	@echo "=== UZ801 v3.0 (MSM8916) Multi-OS Builder & Flasher (macOS Docker/OrbStack) ==="
 	@echo ""
 	@echo "Build Targets (via Docker/OrbStack):"
-	@echo "  make build-alpine   - Build Alpine Linux v3.21 (OpenRC + musl)"
-	@echo "  make build-void     - Build Void Linux (runit + musl)"
-	@echo "  make build-arch     - Build Arch Linux ARM (systemd + glibc)"
-	@echo "  make build-dietpi   - Build DietPi v10.7 (Debian 12 Bookworm ARMv8)"
+	@echo "  make build-alpine      - Build Alpine Linux v3.21 (OpenRC + musl)"
+	@echo "  make build-void        - Build Void Linux (runit + musl)"
+	@echo "  make build-arch        - Build Arch Linux ARM (systemd + glibc)"
+	@echo "  make build-dietpi      - Build DietPi v10.7 (Debian 12 Bookworm ARMv8)"
+	@echo "  make build-immortalwrt - Build ImmortalWrt 24.10.6 (procd + LuCI Web UI)"
 	@echo ""
 	@echo "Flash Targets (via EDL 9008):"
-	@echo "  make flash-alpine   - Flash Alpine Linux rootfs + boot"
-	@echo "  make flash-void     - Flash Void Linux rootfs + boot"
-	@echo "  make flash-arch     - Flash Arch Linux ARM rootfs + boot"
-	@echo "  make flash-dietpi   - Flash DietPi rootfs + boot"
-	@echo "  make flash-full OS=alpine|void|arch|dietpi - Full flash (GPT + FW + Radio + OS)"
+	@echo "  make flash-alpine      - Flash Alpine Linux rootfs + boot"
+	@echo "  make flash-void        - Flash Void Linux rootfs + boot"
+	@echo "  make flash-arch        - Flash Arch Linux ARM rootfs + boot"
+	@echo "  make flash-dietpi      - Flash DietPi rootfs + boot"
+	@echo "  make flash-immortalwrt - Flash ImmortalWrt 24.10.6 rootfs + boot"
+	@echo "  make flash-full OS=alpine|void|arch|dietpi|immortalwrt - Full flash"
 
 build-alpine:
 	docker run --rm --privileged --platform linux/arm64 \
@@ -79,6 +81,15 @@ build-dietpi:
 	    cd /host && ./scripts/build-dietpi.sh ./files \
 	  '
 
+build-immortalwrt:
+	docker run --rm --privileged --platform linux/arm64 \
+	  -v "$$PWD:/host" \
+	  ubuntu:22.04 bash -ec '\
+	    export DEBIAN_FRONTEND=noninteractive && \
+	    apt-get update -qq && apt-get install -y -qq wget e2fsprogs ca-certificates >/dev/null && \
+	    cd /host && ./scripts/build-immortalwrt.sh ./files \
+	  '
+
 flash-alpine:
 	./flash.sh alpine
 
@@ -90,6 +101,9 @@ flash-arch:
 
 flash-dietpi:
 	./flash.sh dietpi
+
+flash-immortalwrt:
+	./flash.sh immortalwrt
 
 flash-full:
 	./flash.sh -f $(OS)

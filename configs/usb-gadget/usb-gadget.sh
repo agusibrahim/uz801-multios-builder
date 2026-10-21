@@ -75,12 +75,12 @@ setup_gadget() {
         if ip link show usb0 >/dev/null 2>&1; then
             ip link set usb0 up 2>/dev/null || true
             ip addr replace 192.168.42.1/24 dev usb0 2>/dev/null || true
-            if [ ! -f /run/dnsmasq-usb0.pid ] || ! kill -0 $(cat /run/dnsmasq-usb0.pid 2>/dev/null) 2>/dev/null; then
-                /usr/sbin/dnsmasq --interface=usb0 --bind-interfaces --except-interface=lo \
-                    --dhcp-range=192.168.42.10,192.168.42.250,255.255.255.0,12h \
-                    --dhcp-option=3 --dhcp-leasefile=/run/dnsmasq-usb0.leases \
-                    --pid-file=/run/dnsmasq-usb0.pid 2>/dev/null || true
-            fi
+        if [ ! -f /run/dnsmasq-usb0.pid ] || ! kill -0 $(cat /run/dnsmasq-usb0.pid 2>/dev/null) 2>/dev/null; then
+            /usr/sbin/dnsmasq --user=root --interface=usb0 --bind-interfaces --except-interface=lo \
+                --dhcp-range=192.168.42.10,192.168.42.250,255.255.255.0,12h \
+                --dhcp-option=3 --dhcp-leasefile=/run/dnsmasq-usb0.leases \
+                --pid-file=/run/dnsmasq-usb0.pid 2>/dev/null || true
+        fi
         fi
         return 0
     fi
@@ -198,7 +198,7 @@ setup_gadget() {
         ip link set usb0 up 2>/dev/null || true
         ip addr replace 192.168.42.1/24 dev usb0 2>/dev/null || true
         kill $(cat /run/dnsmasq-usb0.pid 2>/dev/null) 2>/dev/null || true
-        /usr/sbin/dnsmasq --interface=usb0 --bind-interfaces --except-interface=lo \
+        /usr/sbin/dnsmasq --user=root --interface=usb0 --bind-interfaces --except-interface=lo \
             --dhcp-range=192.168.42.10,192.168.42.250,255.255.255.0,12h \
             --dhcp-option=3 --dhcp-leasefile=/run/dnsmasq-usb0.leases \
             --pid-file=/run/dnsmasq-usb0.pid 2>/dev/null || true

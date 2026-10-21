@@ -36,23 +36,26 @@ if [[ -z "$OS_CHOICE" ]]; then
     echo "  [2] Void Linux           (runit  + musl)"
     echo "  [3] Arch Linux ARM       (systemd + glibc)"
     echo "  [4] DietPi v10.7         (Debian 12 Bookworm ARMv8)"
-    read -rp "Pilihan [1-4] (Default: 1): " num
+    echo "  [5] ImmortalWrt 24.10.6  (procd + LuCI Web UI)"
+    read -rp "Pilihan [1-5] (Default: 1): " num
     case "${num:-1}" in
         1) OS_CHOICE="alpine" ;;
         2) OS_CHOICE="void" ;;
         3) OS_CHOICE="arch" ;;
         4) OS_CHOICE="dietpi" ;;
+        5) OS_CHOICE="immortalwrt" ;;
         *) echo "[-] Pilihan tidak valid"; exit 1 ;;
     esac
 fi
 
 case "$OS_CHOICE" in
-    alpine) ROOTFS_GZ="$FILES_DIR/alpine-rootfs.img.gz" ;;
-    void)   ROOTFS_GZ="$FILES_DIR/void-rootfs.img.gz" ;;
-    arch)   ROOTFS_GZ="$FILES_DIR/arch-rootfs.img.gz" ;;
-    dietpi) ROOTFS_GZ="$FILES_DIR/dietpi-rootfs.img.gz" ;;
+    alpine)      ROOTFS_GZ="$FILES_DIR/alpine-rootfs.img.gz" ;;
+    void)        ROOTFS_GZ="$FILES_DIR/void-rootfs.img.gz" ;;
+    arch)        ROOTFS_GZ="$FILES_DIR/arch-rootfs.img.gz" ;;
+    dietpi)      ROOTFS_GZ="$FILES_DIR/dietpi-rootfs.img.gz" ;;
+    immortalwrt) ROOTFS_GZ="$FILES_DIR/immortalwrt-rootfs.img.gz" ;;
     *)
-        echo "[-] Unknown OS: $OS_CHOICE (choose: alpine, void, arch, dietpi)"
+        echo "[-] Unknown OS: $OS_CHOICE (choose: alpine, void, arch, dietpi, immortalwrt)"
         exit 1
         ;;
 esac

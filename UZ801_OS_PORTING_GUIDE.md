@@ -301,5 +301,22 @@ Implementasi untuk mem-porting **DietPi (`ARMv8 64-bit`)** telah tersedia di [`s
    - Karena UZ801 tidak memiliki baterai RTC, jam sistem saat cold-boot mundur sehingga sertifikat HTTPS (`curl` di `dietpi-banner` dan `apt update` ke `https://deb.debian.org`) ditolak dengan `certificate is not yet valid`.
    - Solusi: install `systemd-timesyncd` dan tambahkan sinkronisasi waktu awal via HTTP `Date:` header (`curl -sI http://1.1.1.1`) di `uz801-init.sh`.
 
+---
+
+## 9. Studi Kasus: Porting ImmortalWrt 24.10.6 Mainline (`procd` + `LuCI Argon`) — `scripts/build-immortalwrt.sh`
+
+Implementasi untuk mem-porting **ImmortalWrt 24.10.6 (`armsr/armv8`)** di atas kernel mainline `6.12.1-msm8916` telah tersedia di [`scripts/build-immortalwrt.sh`](scripts/build-immortalwrt.sh) dan menghasilkan `files/immortalwrt-rootfs.img.gz`.
+
+### Detail Khusus OpenWrt / ImmortalWrt pada Kernel Mainline `6.12.1-msm8916`:
+1. **Pembuatan Symlink `/dev/disk/by-partlabel/*` untuk `rmtfs`**:
+   - Karena `procd` di OpenWrt tidak menggunakan `eudev`, direktori `/dev/disk/by-partlabel/` tidak otomatis dibuat saat boot. Script `/etc/init.d/uz801-init` membaca `DEVNAME` dan `PARTNAME` dari `/sys/block/mmcblk0/mmcblk0p*/uevent` dan membuat symlink di `/dev/disk/by-partlabel/` sebelum menjalankan `rmtfs -P -r -s`.
+2. **Pelaporan Event Kernel ke `ModemManager` (`--without-udev`)**:
+   - Paket `modemmanager` di OpenWrt dikompilasi tanpa `libgudev` dan mengandalkan notifikasi event eksplisit. Script `uz801-init` memanggil `mmcli --report-kernel-event="action=add,name=...,subsystem=..."` untuk seluruh node di `/sys/class/wwan/*`, `/sys/class/net/wwan*`, dan `/sys/class/rpmsg/*`, lalu menghubungkan modem (`mmcli -m 0 --simple-connect="apn=byu,ip-type=ipv4"`) dan memasang IP bearer pada `wwan0`.
+3. **Auto-Detect Path WiFi `mac80211` (`wifi config`)**:
+   - Pada kernel 6.12, path sysfs WCN3620 berada di bawah `remoteproc0:smd-edge`. Dengan memanggil `wifi config` setelah modul `wcn36xx` dimuat, OpenWrt otomatis mendeteksi path `radio0` yang tepat lalu mengonfigurasi `default_radio0` sebagai client (`sta`) ke SSID WiFi.
+4. **Menghapus `99-default-settings-chinese`**:
+   - Menghapus `/etc/uci-defaults/99-default-settings-chinese` agar timezone (`Asia/Jakarta`), bahasa Inggris pada LuCI Argon (`http://192.168.42.1`), dan repo resmi ImmortalWrt tetap terjaga.
+
+
 
 

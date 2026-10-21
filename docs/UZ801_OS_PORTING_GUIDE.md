@@ -1,3 +1,5 @@
+> 🌐 **Bahasa / Language:** **[🇬🇧 English](UZ801_OS_PORTING_GUIDE_EN.md)** | **🇮🇩 Bahasa Indonesia**
+
 # Panduan Lengkap Porting & Build OS Linux untuk Modem USB MSM8916 (Yiming UZ801 v3.0)
 
 Dokumen ini merangkum seluruh arsitektur hardware, urutan booting, tabel partisi GPT, jebakan (*pitfalls*) bootloader/kernel/driver, hingga konfigurasi USB Gadget (NCM + ADB), WiFi (`WCN3620`), dan Modem 4G LTE (`QDSP6 MPSS`) pada dongle **Yiming UZ801 v3.0 (Qualcomm Snapdragon 410 / MSM8916)**.
