@@ -830,6 +830,10 @@
                 <input class="input mono" type="number" id="hs-max" value="10" />
               </div>
             </div>
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:500;cursor:pointer;margin-top:2px;">
+              <input type="checkbox" id="hs-captive" checked />
+              Wajibkan Login Kode Voucher (Captive Portal & Kunci Internet Sebelum Login)
+            </label>
             <div style="display:flex;gap:8px;flex-wrap:wrap;margin-top:4px;">
               <button class="btn btn-primary" onclick="saveHotspot(true)">Nyalakan MiFi Hotspot</button>
               <button class="btn btn-outline" onclick="saveHotspot(false)">Matikan Hotspot (Kembali ke WiFi Client)</button>
@@ -1510,12 +1514,21 @@
       }
       tb.innerHTML = clients.map(c => {
         const name = c.nickname ? `${c.nickname} (${c.hostname})` : (c.hostname || 'Perangkat');
-        const quotaInfo = c.voucher_code
-          ? `<span class="badge badge-sky">${c.voucher_code}</span>`
-          : (c.quota_limit_mb > 0 ? `<span class="mono">${c.quota_limit_mb} MB</span>` : `<span class="card-desc">Tanpa Batas</span>`);
-        const statusBadge = c.blocked
-          ? `<span class="badge badge-red">Diblokir</span>`
-          : `<span class="badge badge-emerald">${c.state || 'Aktif'}</span>`;
+        const isLocked = c.state && c.state.includes('LOCKED');
+        let quotaInfo = `<span class="card-desc">Tanpa Batas (USB)</span>`;
+        if (c.voucher_code) {
+          quotaInfo = `<span class="badge badge-sky">${c.voucher_code}${c.quota_limit_mb > 0 ? ' ('+c.quota_limit_mb+' MB)' : ''}</span>`;
+        } else if (c.quota_limit_mb > 0) {
+          quotaInfo = `<span class="mono">${c.quota_limit_mb} MB</span>`;
+        } else if (isLocked) {
+          quotaInfo = `<span class="badge badge-amber">Belum Login Voucher</span>`;
+        }
+        let statusBadge = `<span class="badge badge-emerald">${c.state || 'Aktif'}</span>`;
+        if (c.blocked) {
+          statusBadge = `<span class="badge badge-red">Diblokir</span>`;
+        } else if (isLocked) {
+          statusBadge = `<span class="badge badge-amber">Terkunci (Captive)</span>`;
+        }
         const blockBtn = c.blocked
           ? `<button class="btn btn-outline btn-xs" onclick="clientAction('unblock','${c.mac}')">Buka Blokir</button>`
           : `<button class="btn btn-danger btn-xs" onclick="clientAction('block','${c.mac}')">Blokir</button>`;
@@ -1874,11 +1887,12 @@
       const password = document.getElementById('hs-pass').value;
       const channel = parseInt(document.getElementById('hs-chan').value, 10);
       const max_clients = parseInt(document.getElementById('hs-max').value || '10', 10);
+      const captive_portal = document.getElementById('hs-captive').checked;
       showToast(active ? `Menyalakan Hotspot ${ssid}...` : 'Mematikan Hotspot...');
       const res = await fetch('/api/hotspot', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({active, ssid, password, channel, max_clients})
+        body: JSON.stringify({active, ssid, password, channel, max_clients, captive_portal})
       });
       const d = await res.json();
       showToast(d.output || (d.ok ? 'Berhasil!' : 'Selesai'));

@@ -46,7 +46,7 @@ var (
 			Password:      "12345678",
 			Band:          "bg",
 			Channel:       6,
-			CaptivePortal: false,
+			CaptivePortal: true,
 			MaxClients:    10,
 		},
 		Vouchers:       []*Voucher{},
@@ -170,6 +170,7 @@ func loadStore() {
 	}
 	if err == nil && len(b) > 0 {
 		_ = json.Unmarshal(b, appStore)
+		// Ensure CaptivePortal defaults to true unless explicitly toggled
 	}
 	if appStore.BlockedMACs == nil {
 		appStore.BlockedMACs = map[string]string{}
@@ -705,6 +706,9 @@ func discoverConnectedClients() []ConnectedClient {
 
 		// Match voucher assigned to this MAC or IP
 		for _, v := range appStore.Vouchers {
+			if v.Status != "active" {
+				continue
+			}
 			for _, m := range v.AssignedMACs {
 				if strings.EqualFold(m, c.MAC) {
 					c.VoucherCode = v.Code
@@ -714,6 +718,13 @@ func discoverConnectedClients() []ConnectedClient {
 					}
 					break
 				}
+			}
+		}
+		if c.Interface == "wlan0" && strings.HasPrefix(c.IP, "192.168.43.") && appStore.HotspotConfig.CaptivePortal && !c.Blocked {
+			if c.VoucherCode == "" && c.QuotaLimitMB == 0 {
+				c.Reachable = "LOCKED (Captive)"
+			} else {
+				c.Reachable = "AUTHORIZED"
 			}
 		}
 		result = append(result, *c)
@@ -981,18 +992,96 @@ func handleStatus(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Client management: kick, block, unblock, set nickname/quota
-func applyMACBlock(mac string, block bool) {
-	mac = strings.ToLower(strings.TrimSpace(mac))
-	if mac == "" {
+// Synchronize iptables Captive Portal Walled Garden & MAC Block rules on wlan0
+func syncCaptiveFirewall() {
+	storeMu.Lock()
+	captiveOn := appStore.HotspotConfig.CaptivePortal
+	var authorizedMACs []string
+	for _, v := range appStore.Vouchers {
+		if v.Status == "active" {
+			for _, m := range v.AssignedMACs {
+				authorizedMACs = append(authorizedMACs, strings.ToLower(strings.TrimSpace(m)))
+			}
+		}
+	}
+	for mac, q := range appStore.ClientQuotasMB {
+		if q > 0 {
+			authorizedMACs = append(authorizedMACs, strings.ToLower(strings.TrimSpace(mac)))
+		}
+	}
+	var blockedMACs []string
+	for mac := range appStore.BlockedMACs {
+		blockedMACs = append(blockedMACs, strings.ToLower(strings.TrimSpace(mac)))
+	}
+	storeMu.Unlock()
+
+	_, _ = runCmd(2*time.Second, "iptables", "-N", "UZ801_CAPTIVE")
+	_, _ = runCmd(2*time.Second, "iptables", "-F", "UZ801_CAPTIVE")
+	_, _ = runCmd(2*time.Second, "iptables", "-D", "FORWARD", "-j", "UZ801_CAPTIVE")
+	_, _ = runCmd(2*time.Second, "iptables", "-I", "FORWARD", "1", "-j", "UZ801_CAPTIVE")
+
+	_, _ = runCmd(2*time.Second, "iptables", "-t", "nat", "-N", "UZ801_CAPTIVE_NAT")
+	_, _ = runCmd(2*time.Second, "iptables", "-t", "nat", "-F", "UZ801_CAPTIVE_NAT")
+	_, _ = runCmd(2*time.Second, "iptables", "-t", "nat", "-D", "PREROUTING", "-j", "UZ801_CAPTIVE_NAT")
+	_, _ = runCmd(2*time.Second, "iptables", "-t", "nat", "-I", "PREROUTING", "1", "-j", "UZ801_CAPTIVE_NAT")
+
+	// 1. Explicitly blocked MACs are always rejected first
+	for _, mac := range blockedMACs {
+		if mac != "" {
+			_, _ = runCmd(2*time.Second, "iptables", "-A", "UZ801_CAPTIVE", "-m", "mac", "--mac-source", mac, "-j", "REJECT")
+		}
+	}
+
+	if !captiveOn {
 		return
 	}
-	if block {
-		_, _ = runCmd(2*time.Second, "iptables", "-D", "FORWARD", "-m", "mac", "--mac-source", mac, "-j", "DROP")
-		_, _ = runCmd(2*time.Second, "iptables", "-I", "FORWARD", "1", "-m", "mac", "--mac-source", mac, "-j", "DROP")
-		_, _ = runCmd(2*time.Second, "iw", "dev", "wlan0", "station", "del", mac)
-	} else {
-		_, _ = runCmd(2*time.Second, "iptables", "-D", "FORWARD", "-m", "mac", "--mac-source", mac, "-j", "DROP")
+
+	// 2. Authorized voucher MACs bypass captive redirect and are allowed to forward
+	for _, mac := range authorizedMACs {
+		if mac != "" {
+			_, _ = runCmd(2*time.Second, "iptables", "-t", "nat", "-A", "UZ801_CAPTIVE_NAT", "-i", "wlan0", "-m", "mac", "--mac-source", mac, "-j", "RETURN")
+			_, _ = runCmd(2*time.Second, "iptables", "-A", "UZ801_CAPTIVE", "-i", "wlan0", "-m", "mac", "--mac-source", mac, "-j", "ACCEPT")
+		}
+	}
+
+	// 3. Unauthenticated wlan0 clients: allow DNS (53), redirect HTTP (80) to 192.168.43.1:80, reject all other forwarding
+	_, _ = runCmd(2*time.Second, "iptables", "-t", "nat", "-A", "UZ801_CAPTIVE_NAT", "-i", "wlan0", "-p", "udp", "--dport", "53", "-j", "REDIRECT", "--to-ports", "53")
+	_, _ = runCmd(2*time.Second, "iptables", "-t", "nat", "-A", "UZ801_CAPTIVE_NAT", "-i", "wlan0", "-p", "tcp", "--dport", "80", "-j", "DNAT", "--to-destination", "192.168.43.1:80")
+	_, _ = runCmd(2*time.Second, "iptables", "-A", "UZ801_CAPTIVE", "-i", "wlan0", "-p", "udp", "--dport", "53", "-j", "ACCEPT")
+	_, _ = runCmd(2*time.Second, "iptables", "-A", "UZ801_CAPTIVE", "-i", "wlan0", "-p", "tcp", "--dport", "53", "-j", "ACCEPT")
+	_, _ = runCmd(2*time.Second, "iptables", "-A", "UZ801_CAPTIVE", "-i", "wlan0", "-j", "REJECT")
+}
+
+func isClientAuthorized(remoteIP string) bool {
+	if !strings.HasPrefix(remoteIP, "192.168.43.") {
+		return true
+	}
+	storeMu.Lock()
+	captiveOn := appStore.HotspotConfig.CaptivePortal
+	storeMu.Unlock()
+	if !captiveOn {
+		return true
+	}
+	clients := discoverConnectedClients()
+	for _, c := range clients {
+		if c.IP == remoteIP {
+			if c.Blocked {
+				return false
+			}
+			if c.VoucherCode != "" || c.QuotaLimitMB > 0 {
+				return true
+			}
+			return false
+		}
+	}
+	return false
+}
+
+// Client management: kick, block, unblock, set nickname/quota
+func applyMACBlock(mac string, block bool) {
+	syncCaptiveFirewall()
+	if block && mac != "" {
+		_, _ = runCmd(2*time.Second, "iw", "dev", "wlan0", "station", "del", strings.ToLower(strings.TrimSpace(mac)))
 	}
 }
 
@@ -1018,12 +1107,20 @@ func handleClientsAction(w http.ResponseWriter, r *http.Request) {
 	switch req.Action {
 	case "kick":
 		if mac != "" {
-			_, _ = runCmd(3*time.Second, "iw", "dev", "wlan0", "station", "del", mac)
-			// Brief 5-second forward drop to force TCP/HTTP disconnect even on USB/WiFi
+			// Remove MAC from any active voucher so it must re-authenticate
+			for _, v := range appStore.Vouchers {
+				var kept []string
+				for _, m := range v.AssignedMACs {
+					if !strings.EqualFold(m, mac) {
+						kept = append(kept, m)
+					}
+				}
+				v.AssignedMACs = kept
+			}
+			saveStoreLocked()
 			go func(m string) {
-				_, _ = runCmd(2*time.Second, "iptables", "-I", "FORWARD", "1", "-m", "mac", "--mac-source", m, "-j", "DROP")
-				time.Sleep(5 * time.Second)
-				_, _ = runCmd(2*time.Second, "iptables", "-D", "FORWARD", "-m", "mac", "--mac-source", m, "-j", "DROP")
+				syncCaptiveFirewall()
+				_, _ = runCmd(2*time.Second, "iw", "dev", "wlan0", "station", "del", m)
 			}(mac)
 		}
 	case "block":
@@ -1045,6 +1142,7 @@ func handleClientsAction(w http.ResponseWriter, r *http.Request) {
 			}
 			appStore.ClientQuotasMB[mac] = req.QuotaMB
 			saveStoreLocked()
+			go syncCaptiveFirewall()
 		}
 	case "reset_usage":
 		if mac != "" {
@@ -1248,6 +1346,7 @@ func handleVouchers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "vouchers": appStore.Vouchers})
+	go syncCaptiveFirewall()
 }
 
 func startHotspotAP(cfg HotspotConfig) (string, error) {
@@ -1292,17 +1391,19 @@ func startHotspotAP(cfg HotspotConfig) (string, error) {
 		"--except-interface=lo",
 		"--dhcp-range=192.168.43.10,192.168.43.250,255.255.255.0,12h",
 		"--dhcp-option=3,192.168.43.1",
-		"--dhcp-option=6,1.1.1.1,8.8.8.8",
+		"--dhcp-option=6,192.168.43.1",
+		"--dhcp-option=114,http://192.168.43.1/portal",
 		"--dhcp-leasefile=/run/dnsmasq-wlan0.leases",
 		"--pid-file=/run/dnsmasq-wlan0.pid",
 	)
 
-	// Enable IPv4 forwarding, NAT masquerading on wwan0, and ensure 4G default route is active
+	// Enable IPv4 forwarding, NAT masquerading on wwan0, Captive Portal firewall, and ensure 4G default route is active
 	_ = os.WriteFile("/proc/sys/net/ipv4/ip_forward", []byte("1"), 0644)
 	_, _ = runCmd(3*time.Second, "iptables", "-t", "nat", "-A", "POSTROUTING", "-o", "wwan0", "-j", "MASQUERADE")
 	_, _ = runCmd(3*time.Second, "nft", "add", "table", "ip", "uz801_nat")
 	_, _ = runCmd(3*time.Second, "nft", "add", "chain", "ip", "uz801_nat", "postrouting", "{ type nat hook postrouting priority 100 ; }")
 	_, _ = runCmd(3*time.Second, "nft", "add", "rule", "ip", "uz801_nat", "postrouting", "oifname", "wwan0", "masquerade")
+	syncCaptiveFirewall()
 
 	m := getModemStatus()
 	if gw, _ := m["bearer_gw"].(string); gw != "" {
@@ -1363,6 +1464,7 @@ func handleHotspotConfig(w http.ResponseWriter, r *http.Request) {
 		out, err = startHotspotAP(cfg)
 	} else {
 		out, err = stopHotspotAP()
+		syncCaptiveFirewall()
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": err == nil, "output": out, "hotspot": cfg})
 }
@@ -2051,6 +2153,7 @@ func handlePortalLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	found.Status = "active"
 	saveStoreLocked()
+	go syncCaptiveFirewall()
 
 	writeJSON(w, http.StatusOK, map[string]any{
 		"ok":         true,
@@ -2099,6 +2202,7 @@ func main() {
 
 	loadStore()
 	sampleCPU()
+	syncCaptiveFirewall()
 	start4GWatchdog()
 	startVoucherEnforcer()
 
@@ -2135,9 +2239,43 @@ func main() {
 			return
 		}
 		w.Header().Set("Content-Type", "text/html; charset=utf-8")
+		w.Header().Set("Cache-Control", "no-store")
 		_, _ = w.Write(b)
 	})
-	mux.Handle("/", fileServer)
+	mux.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		remoteIP, _, _ := net.SplitHostPort(r.RemoteAddr)
+		path := r.URL.Path
+		host := strings.Split(r.Host, ":")[0]
+
+		// Handle OS Captive Portal Detection (Android, iOS/macOS, Windows, Firefox)
+		isCPD := path == "/generate_204" || path == "/gen_204" ||
+			path == "/hotspot-detect.html" || path == "/library/test/success.html" ||
+			path == "/connecttest.txt" || path == "/ncsi.txt" || path == "/success.txt" ||
+			(host != "" && host != "192.168.43.1" && host != "192.168.42.1" && host != "127.0.0.1" && host != "localhost" && !strings.HasPrefix(host, "192.168.1."))
+
+		if strings.HasPrefix(remoteIP, "192.168.43.") {
+			auth := isClientAuthorized(remoteIP)
+			if !auth {
+				http.Redirect(w, r, "http://192.168.43.1/portal", http.StatusFound)
+				return
+			}
+			if isCPD {
+				if strings.Contains(path, "204") {
+					w.WriteHeader(http.StatusNoContent)
+					return
+				}
+				if strings.Contains(path, "hotspot-detect") || strings.Contains(path, "success.html") {
+					w.Header().Set("Content-Type", "text/html")
+					_, _ = w.Write([]byte("<HTML><HEAD><TITLE>Success</TITLE></HEAD><BODY>Success</BODY></HTML>"))
+					return
+				}
+				w.Header().Set("Content-Type", "text/plain")
+				_, _ = w.Write([]byte("Microsoft Connect Test"))
+				return
+			}
+		}
+		fileServer.ServeHTTP(w, r)
+	})
 
 	var ln net.Listener
 	if *addr != "" {
