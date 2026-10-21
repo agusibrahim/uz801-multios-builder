@@ -2,7 +2,7 @@
 
 # OpenStick UZ801 v3.0 (MSM8916) — Multi-OS Linux Builder & EDL Flasher
 
-Builder dan flasher mandiri untuk menjalankan **5 distribusi Linux Mainline 64-bit (`aarch64`, Kernel `6.12.1-msm8916`)** pada modem USB 4G LTE **Yiming UZ801 v3.0 (Qualcomm Snapdragon 410 / MSM8916)** langsung dari **macOS (Apple Silicon via Docker/OrbStack)** maupun Linux.
+Builder dan flasher mandiri untuk menjalankan **6 distribusi Linux Mainline 64-bit (`aarch64`, Kernel `6.12.1-msm8916`)** pada modem USB 4G LTE **Yiming UZ801 v3.0 (Qualcomm Snapdragon 410 / MSM8916)** langsung dari **macOS (Apple Silicon via Docker/OrbStack)** maupun Linux.
 
 Seluruh image OS yang dihasilkan sudah terkonfigurasi otomatis (*out-of-the-box*) dengan:
 - **ADB Over USB (`adbd` FunctionFS)** — langsung terdeteksi di `adb devices` dan bisa `adb shell` (akses `root` instan tanpa jaringan).
@@ -28,6 +28,7 @@ Keempat image OS berikut sudah di-build, diuji langsung di hardware UZ801 v3.0, 
 | **3** | **Arch Linux ARM** | `arch-rootfs.img.gz` (`205 MB`) | `systemd` | `glibc` (+ `musl`) | `pacman` | **~88 MB** | Ekosistem Arch/`pacman` lengkap & paket selalu terbaru |
 | **4** | **DietPi v10.7 (Bookworm)** | `dietpi-rootfs.img.gz` (`100 MB`) | `systemd` | `glibc` (+ `musl`) | `apt` + `dietpi-software` | **~81 MB** | Berbasis Debian 12 dengan menu `dietpi-config` & `dietpi-software` |
 | **5** | **ImmortalWrt 24.10.6** | `immortalwrt-rootfs.img.gz` (`50 MB`) | `procd` | `musl` | `opkg` + `LuCI Web UI` | **~60 MB** | Router OS modern dengan dashboard web **LuCI Argon** (`http://192.168.42.1`) |
+| **6** | **Ubuntu 24.04.5 LTS** | `ubuntu-rootfs.img.gz` (`106 MB`) | `systemd` | `glibc` (+ `musl`) | `apt` (`Ubuntu Ports`) | **~77 MB** | Ubuntu Noble Numbat 24.04.5 LTS resmi bebas bloat (`ubuntu-base` tuned) |
 
 ---
 
@@ -103,6 +104,7 @@ Gunakan mode ini jika dongle sudah pernah di-flash dengan skema partisi project 
 ./flash.sh arch          # Flash Arch Linux ARM
 ./flash.sh dietpi        # Flash DietPi v10.7
 ./flash.sh immortalwrt   # Flash ImmortalWrt 24.10.6
+./flash.sh ubuntu        # Flash Ubuntu 24.04.5 LTS
 ```
 
 #### B. Mode Full (Flash GPT + Bootloader + Radio EFS + `boot` + `rootfs`)
@@ -192,4 +194,5 @@ make build-void          # Menghasilkan files/void-rootfs.img.gz
 make build-arch          # Menghasilkan files/arch-rootfs.img.gz
 make build-dietpi        # Menghasilkan files/dietpi-rootfs.img.gz
 make build-immortalwrt   # Menghasilkan files/immortalwrt-rootfs.img.gz
+make build-ubuntu        # Menghasilkan files/ubuntu-rootfs.img.gz
 ```

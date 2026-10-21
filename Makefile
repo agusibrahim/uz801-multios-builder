@@ -1,5 +1,5 @@
-.PHONY: help build-alpine build-void build-arch build-dietpi build-immortalwrt \
-        flash-alpine flash-void flash-arch flash-dietpi flash-immortalwrt flash-full
+.PHONY: help build-alpine build-void build-arch build-dietpi build-immortalwrt build-ubuntu \
+        flash-alpine flash-void flash-arch flash-dietpi flash-immortalwrt flash-ubuntu flash-full
 
 help:
 	@echo "=== UZ801 v3.0 (MSM8916) Multi-OS Builder & Flasher (macOS Docker/OrbStack) ==="
@@ -10,6 +10,7 @@ help:
 	@echo "  make build-arch        - Build Arch Linux ARM (systemd + glibc)"
 	@echo "  make build-dietpi      - Build DietPi v10.7 (Debian 12 Bookworm ARMv8)"
 	@echo "  make build-immortalwrt - Build ImmortalWrt 24.10.6 (procd + LuCI Web UI)"
+	@echo "  make build-ubuntu      - Build Ubuntu 24.04.5 LTS (systemd + glibc)"
 	@echo ""
 	@echo "Flash Targets (via EDL 9008):"
 	@echo "  make flash-alpine      - Flash Alpine Linux rootfs + boot"
@@ -17,7 +18,8 @@ help:
 	@echo "  make flash-arch        - Flash Arch Linux ARM rootfs + boot"
 	@echo "  make flash-dietpi      - Flash DietPi rootfs + boot"
 	@echo "  make flash-immortalwrt - Flash ImmortalWrt 24.10.6 rootfs + boot"
-	@echo "  make flash-full OS=alpine|void|arch|dietpi|immortalwrt - Full flash"
+	@echo "  make flash-ubuntu      - Flash Ubuntu 24.04.5 LTS rootfs + boot"
+	@echo "  make flash-full OS=alpine|void|arch|dietpi|immortalwrt|ubuntu - Full flash"
 
 build-alpine:
 	docker run --rm --privileged --platform linux/arm64 \
@@ -90,6 +92,15 @@ build-immortalwrt:
 	    cd /host && ./scripts/build-immortalwrt.sh ./files \
 	  '
 
+build-ubuntu:
+	docker run --rm --privileged --platform linux/arm64 \
+	  -v "$$PWD:/host" \
+	  ubuntu:22.04 bash -ec '\
+	    export DEBIAN_FRONTEND=noninteractive && \
+	    apt-get update -qq && apt-get install -y -qq wget e2fsprogs ca-certificates >/dev/null && \
+	    cd /host && ./scripts/build-ubuntu.sh ./files \
+	  '
+
 flash-alpine:
 	./flash.sh alpine
 
@@ -104,6 +115,9 @@ flash-dietpi:
 
 flash-immortalwrt:
 	./flash.sh immortalwrt
+
+flash-ubuntu:
+	./flash.sh ubuntu
 
 flash-full:
 	./flash.sh -f $(OS)

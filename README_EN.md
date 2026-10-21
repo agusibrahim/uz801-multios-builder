@@ -2,7 +2,7 @@
 
 # OpenStick UZ801 v3.0 (MSM8916) — Multi-OS Linux Builder & EDL Flasher
 
-A self-contained builder and EDL flasher for running **5 Mainline 64-bit Linux distributions (`aarch64`, Kernel `6.12.1-msm8916`)** on the **Yiming UZ801 v3.0 (Qualcomm Snapdragon 410 / MSM8916)** 4G LTE USB Modem Stick directly from **macOS (Apple Silicon via Docker/OrbStack)** or Linux.
+A self-contained builder and EDL flasher for running **6 Mainline 64-bit Linux distributions (`aarch64`, Kernel `6.12.1-msm8916`)** on the **Yiming UZ801 v3.0 (Qualcomm Snapdragon 410 / MSM8916)** 4G LTE USB Modem Stick directly from **macOS (Apple Silicon via Docker/OrbStack)** or Linux.
 
 Every OS image built by this project comes pre-configured **out-of-the-box** with:
 - **ADB Over USB (`adbd` FunctionFS)** — immediately detected by `adb devices` with direct `root` access via `adb shell` (even without network/IP).
@@ -28,6 +28,7 @@ All 4 OS images have been built, tested live on UZ801 v3.0 hardware, and are ava
 | **3** | **Arch Linux ARM** | `arch-rootfs.img.gz` (`205 MB`) | `systemd` | `glibc` (+ `musl`) | `pacman` | **~88 MB** | Full Arch/`pacman` rolling-release ecosystem with latest packages |
 | **4** | **DietPi v10.7 (Bookworm)** | `dietpi-rootfs.img.gz` (`100 MB`) | `systemd` | `glibc` (+ `musl`) | `apt` + `dietpi-software` | **~81 MB** | Debian 12 Bookworm base with `dietpi-config` & `dietpi-software` wizards |
 | **5** | **ImmortalWrt 24.10.6** | `immortalwrt-rootfs.img.gz` (`50 MB`) | `procd` | `musl` | `opkg` + `LuCI Web UI` | **~60 MB** | Modern OpenWrt/ImmortalWrt router OS with **LuCI Argon Web UI** (`http://192.168.42.1`) |
+| **6** | **Ubuntu 24.04.5 LTS** | `ubuntu-rootfs.img.gz` (`106 MB`) | `systemd` | `glibc` (+ `musl`) | `apt` (`Ubuntu Ports`) | **~77 MB** | Official Ubuntu Noble Numbat 24.04.5 LTS built from `ubuntu-base` (zero bloat) |
 
 ---
 
@@ -104,6 +105,7 @@ Use this mode if the dongle is already partitioned with this project's GPT layou
 ./flash.sh arch          # Flash Arch Linux ARM
 ./flash.sh dietpi        # Flash DietPi v10.7
 ./flash.sh immortalwrt   # Flash ImmortalWrt 24.10.6
+./flash.sh ubuntu        # Flash Ubuntu 24.04.5 LTS
 ```
 
 #### B. Full Mode (Flashes GPT + Bootloader + Radio EFS Backup/Restore + `boot` + `rootfs`)
@@ -194,4 +196,5 @@ make build-void          # Outputs files/void-rootfs.img.gz
 make build-arch          # Outputs files/arch-rootfs.img.gz
 make build-dietpi        # Outputs files/dietpi-rootfs.img.gz
 make build-immortalwrt   # Outputs files/immortalwrt-rootfs.img.gz
+make build-ubuntu        # Outputs files/ubuntu-rootfs.img.gz
 ```
