@@ -91,6 +91,7 @@ echo "/usr/lib/musl" > "$CHROOT/etc/ld-musl-aarch64.path"
 
 install -Dm0755 "$STAGING/alpine/usr/sbin/rmtfs" "$CHROOT/usr/bin/rmtfs"
 install -Dm0755 configs/adb/adbd "$CHROOT/usr/bin/adbd"
+[ -f configs/dashboard/uz801-dashboard ] && install -Dm0755 configs/dashboard/uz801-dashboard "$CHROOT/usr/bin/uz801-dashboard"
 install -Dm0644 configs/adb/adb_profile "$CHROOT/etc/adb_profile"
 
 mkdir -p "$CHROOT/system/bin"

@@ -74,6 +74,7 @@ echo "${USERNAME} ALL=(ALL:ALL) NOPASSWD: ALL" >> "$CHROOT/etc/sudoers"
 
 # Ensure latest usb-gadget script is installed
 install -Dm0755 configs/usb-gadget/usb-gadget.sh "$CHROOT/usr/sbin/usb-gadget"
+[ -f configs/dashboard/uz801-dashboard ] && install -Dm0755 configs/dashboard/uz801-dashboard "$CHROOT/usr/bin/uz801-dashboard"
 ln -sf /usr/sbin/usb-gadget "$CHROOT/usr/bin/usb-gadget"
 
 # Ensure NetworkManager WiFi & LTE profiles and DNS config

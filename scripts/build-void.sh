@@ -83,6 +83,7 @@ cp -a "$STAGING/alpine/usr/lib/libqrtr.so.1"* "$CHROOT/usr/lib/"
 
 echo "[*] Installing adbd and USB Gadget..."
 install -Dm0755 configs/adb/adbd "$CHROOT/usr/bin/adbd"
+[ -f configs/dashboard/uz801-dashboard ] && install -Dm0755 configs/dashboard/uz801-dashboard "$CHROOT/usr/bin/uz801-dashboard"
 install -Dm0755 configs/adb/libcrypto.so.1.1 "$CHROOT/usr/lib/libcrypto.so.1.1"
 install -Dm0644 configs/adb/adb_profile "$CHROOT/etc/adb_profile"
 mkdir -p "$CHROOT/system/bin"
