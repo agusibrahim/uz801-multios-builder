@@ -1,5 +1,7 @@
 > 🌐 **Language:** **🇬🇧 English** | **[🇮🇩 Bahasa Indonesia](README.md)**
 
+<img src="https://repository-images.githubusercontent.com/1427759466/fcda7a6f-ae1d-4242-8533-b97a388decd3" width='1000px' height='500px'/>
+
 # OpenStick UZ801 v3.0 (MSM8916) — Multi-OS Linux Builder & EDL Flasher
 
 A self-contained builder and EDL flasher for running **10 Mainline 64-bit Linux distributions (`aarch64`, Kernel `6.12.1-msm8916`)** on the **Yiming UZ801 v3.0 (Qualcomm Snapdragon 410 / MSM8916)** 4G LTE USB Modem Stick directly from **macOS (Apple Silicon via Docker/OrbStack)** or Linux.
