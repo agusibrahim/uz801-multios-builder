@@ -42,7 +42,8 @@ if [[ -z "$OS_CHOICE" ]]; then
     echo "  [8] postmarketOS v25.06  (OpenRC + musl Mobile Linux)"
     echo "  [9] Kali Linux Rolling   (systemd + Pocket 4G Pentest Drop-Box)"
     echo "  [10] AlmaLinux 9.8       (systemd + glibc + dnf/rpm Enterprise)"
-    read -rp "Pilihan [1-10] (Default: 1): " num
+    echo "  [11] UZ801 GoOS v1.0     (Pure Go PID 1 Appliance Firmware)"
+    read -rp "Pilihan [1-11] (Default: 1): " num
     case "${num:-1}" in
         1) OS_CHOICE="alpine" ;;
         2) OS_CHOICE="void" ;;
@@ -54,6 +55,7 @@ if [[ -z "$OS_CHOICE" ]]; then
         8) OS_CHOICE="pmos" ;;
         9) OS_CHOICE="kali" ;;
         10) OS_CHOICE="alma" ;;
+        11) OS_CHOICE="goos" ;;
         *) echo "[-] Pilihan tidak valid"; exit 1 ;;
     esac
 fi
@@ -69,8 +71,9 @@ case "$OS_CHOICE" in
     pmos|postmarketos) ROOTFS_GZ="$FILES_DIR/pmos-rootfs.img.gz" ;;
     kali)        ROOTFS_GZ="$FILES_DIR/kali-rootfs.img.gz" ;;
     alma|almalinux) ROOTFS_GZ="$FILES_DIR/alma-rootfs.img.gz" ;;
+    goos)        ROOTFS_GZ="$FILES_DIR/goos-rootfs.img.gz" ;;
     *)
-        echo "[-] Unknown OS: $OS_CHOICE (choose: alpine, void, arch, dietpi, immortalwrt, ubuntu, chimera, pmos, kali, alma)"
+        echo "[-] Unknown OS: $OS_CHOICE (choose: alpine, void, arch, dietpi, immortalwrt, ubuntu, chimera, pmos, kali, alma, goos)"
         exit 1
         ;;
 esac

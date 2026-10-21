@@ -4,7 +4,7 @@
 
 # OpenStick UZ801 v3.0 (MSM8916) — Multi-OS Linux Builder & EDL Flasher
 
-Builder dan flasher mandiri untuk menjalankan **10 distribusi Linux Mainline 64-bit (`aarch64`, Kernel `6.12.1-msm8916`)** pada modem USB 4G LTE **Yiming UZ801 v3.0 (Qualcomm Snapdragon 410 / MSM8916)** langsung dari **macOS (Apple Silicon via Docker/OrbStack)** maupun Linux.
+Builder dan flasher mandiri untuk menjalankan **11 sistem operasi 64-bit (`aarch64`, Kernel `6.12.1-msm8916`)** pada modem USB 4G LTE **Yiming UZ801 v3.0 (Qualcomm Snapdragon 410 / MSM8916)** langsung dari **macOS (Apple Silicon via Docker/OrbStack)** maupun Linux.
 
 Seluruh image OS yang dihasilkan sudah terkonfigurasi otomatis (*out-of-the-box*) dengan:
 - **ADB Over USB (`adbd` FunctionFS)** — langsung terdeteksi di `adb devices` dan bisa `adb shell` (akses `root` instan tanpa jaringan).
@@ -35,6 +35,7 @@ Keempat image OS berikut sudah di-build, diuji langsung di hardware UZ801 v3.0, 
 | **8** | **postmarketOS v25.06** | `pmos-rootfs.img.gz` (`99 MB`) | `OpenRC` | `musl` | `apk` (pmOS + Alpine) | **~52 MB** | Distro mobile Linux asli untuk Qualcomm MSM8916 (`postmarketos-base` console) |
 | **9** | **Kali Linux Rolling** | `kali-rootfs.img.gz` (`132 MB`) | `systemd` | `glibc` (+ `musl`) | `apt` (`kali-rolling`) | **~79 MB** | **Pocket 4G Pentest Drop-Box** (`nmap`, `tcpdump`, `aircrack-ng`, `ncat`, `socat`, `proxychains4`) |
 | **10** | **AlmaLinux 9.8** | `alma-rootfs.img.gz` (`137 MB`) | `systemd` | `glibc` (+ `musl`) | `dnf` / `rpm` | **~83 MB** | Distro **Enterprise RHEL 9 (`dnf`/`rpm`)** stabil ("Olive Jaguar") |
+| **11** | **UZ801 GoOS v1.0** | `goos-rootfs.img.gz` (`104 MB`) | **`goos-init` (Pure Go PID 1)** | Static Go + `musl` | Firmware Appliance | **~42 MB** | **Pure Go PID 1 Appliance OS** tanpa init distro standar, boot instan langsung ke Modem & Hotspot Suite |
 
 ---
 
@@ -115,6 +116,7 @@ Gunakan mode ini jika dongle sudah pernah di-flash dengan skema partisi project 
 ./flash.sh pmos          # Flash postmarketOS v25.06
 ./flash.sh kali          # Flash Kali Linux Rolling
 ./flash.sh alma          # Flash AlmaLinux 9.8
+./flash.sh goos          # Flash UZ801 GoOS v1.0 (Pure Go PID 1)
 ```
 
 #### B. Mode Full (Flash GPT + Bootloader + Radio EFS + `boot` + `rootfs`)
@@ -209,4 +211,5 @@ make build-chimera       # Menghasilkan files/chimera-rootfs.img.gz
 make build-pmos          # Menghasilkan files/pmos-rootfs.img.gz
 make build-kali          # Menghasilkan files/kali-rootfs.img.gz
 make build-alma          # Menghasilkan files/alma-rootfs.img.gz
+make build-goos          # Menghasilkan files/goos-rootfs.img.gz
 ```
