@@ -142,11 +142,28 @@ cat > "$CHROOT/etc/fstab" << 'EOF'
 /dev/mmcblk0p14    /        ext4    rw,noatime,commit=1 0 0
 EOF
 
-# Allow NetworkManager to manage all ethernet/wifi/gsm devices on Ubuntu
+# Allow NetworkManager to manage all ethernet/wifi/gsm devices on Ubuntu and write /etc/resolv.conf directly
 mkdir -p "$CHROOT/etc/NetworkManager/conf.d"
 cat > "$CHROOT/etc/NetworkManager/conf.d/10-globally-managed-devices.conf" << 'EOF'
+[main]
+dns=default
+rc-manager=file
+
 [keyfile]
 unmanaged-devices=interface-name:usb0
+EOF
+
+cat > "$CHROOT/etc/resolv.conf" << 'EOF'
+nameserver 1.1.1.1
+nameserver 8.8.8.8
+EOF
+
+mkdir -p "$CHROOT/etc/apt/apt.conf.d"
+cat > "$CHROOT/etc/apt/apt.conf.d/99-uz801-fast" << 'EOF'
+Acquire::ForceIPv4 "true";
+Acquire::Languages "none";
+Acquire::GzipIndexes "true";
+APT::Install-Recommends "false";
 EOF
 
 echo "[*] Configuring NetworkManager (WiFi & 4G LTE)..."
@@ -242,7 +259,7 @@ WantedBy=multi-user.target
 EOF
 
 chroot "$CHROOT" /bin/bash -e -c "
-systemctl disable systemd-networkd.service systemd-resolved.service 2>/dev/null || true
+systemctl disable systemd-networkd.service systemd-resolved.service apt-daily.timer apt-daily-upgrade.timer 2>/dev/null || true
 systemctl mask systemd-networkd-wait-online.service 2>/dev/null || true
 systemctl enable systemd-timesyncd.service NetworkManager.service ModemManager.service wpa_supplicant.service ssh.service rmtfs.service uz801-init.service
 "
