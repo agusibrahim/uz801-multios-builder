@@ -890,6 +890,7 @@ func getModemStatus() map[string]any {
 	}
 
 	bearerIP := ""
+	bearerPrefix := "30"
 	bearerGW := ""
 	bearerDNS := ""
 	bearerAPN := extractKV(out, "modem.3gpp.eps.initial-bearer.settings.apn")
@@ -905,6 +906,7 @@ func getModemStatus() map[string]any {
 		}
 		apn := extractKV(bOut, "bearer.properties.apn")
 		ip := extractKV(bOut, "bearer.ipv4-config.address")
+		pref := extractKV(bOut, "bearer.ipv4-config.prefix")
 		gw := extractKV(bOut, "bearer.ipv4-config.gateway")
 		dns := extractKV(bOut, "bearer.ipv4-config.dns.value[1]")
 		dur := extractKV(bOut, "bearer.stats.duration")
@@ -913,12 +915,16 @@ func getModemStatus() map[string]any {
 		}
 		if ip != "" {
 			bearerIP = ip
+			if pref != "" {
+				bearerPrefix = pref
+			}
 			bearerGW = gw
 			bearerDNS = dns
 			bearerUptime = dur
 			break
 		}
 	}
+	_ = bearerPrefix
 
 	return map[string]any{
 		"present":       true,
@@ -1020,14 +1026,6 @@ func syncCaptiveFirewall() {
 		if v.Status == "active" {
 			for _, m := range v.AssignedMACs {
 				if ip := macToIP[strings.ToLower(strings.TrimSpace(m))]; ip != "" {
-					authorizedIPs[ip] = true
-					if v.SpeedKbps > 0 {
-						speedLimitByIP[ip] = v.SpeedKbps
-					}
-				}
-			}
-			for _, ip := range v.AssignedIPs {
-				if ip != "" {
 					authorizedIPs[ip] = true
 					if v.SpeedKbps > 0 {
 						speedLimitByIP[ip] = v.SpeedKbps
@@ -1177,6 +1175,9 @@ func handleClientsAction(w http.ResponseWriter, r *http.Request) {
 					}
 				}
 				v.AssignedMACs = kept
+				if len(v.AssignedMACs) == 0 {
+					v.AssignedIPs = []string{}
+				}
 			}
 			saveStoreLocked()
 			go func(m string) {
@@ -1450,6 +1451,10 @@ func startHotspotAP(cfg HotspotConfig) (string, error) {
 		"--interface=wlan0",
 		"--bind-interfaces",
 		"--except-interface=lo",
+		"--no-resolv",
+		"--server=1.1.1.1",
+		"--server=8.8.8.8",
+		"--filter-AAAA",
 		"--dhcp-range=192.168.43.10,192.168.43.250,255.255.255.0,12h",
 		"--dhcp-option=3,192.168.43.1",
 		"--dhcp-option=6,192.168.43.1",
@@ -1753,13 +1758,30 @@ func handleModemAction(w http.ResponseWriter, r *http.Request) {
 	case "connect":
 		_, _ = runCmd(5*time.Second, "mmcli", "-m", "0", "--set-power-state-on")
 		_, _ = runCmd(5*time.Second, "mmcli", "-m", "0", "-e")
-		out, err = runCmd(20*time.Second, "mmcli", "-m", "0", fmt.Sprintf("--simple-connect=apn=%s,ip-type=%s", req.APN, req.IPType))
-		_, _ = runCmd(10*time.Second, "nmcli", "connection", "up", "lte")
+		_, _ = runCmd(4*time.Second, "nmcli", "connection", "modify", "lte", "gsm.apn", req.APN)
+		out, err = runCmd(15*time.Second, "nmcli", "connection", "up", "lte")
+		if err != nil {
+			out, err = runCmd(20*time.Second, "mmcli", "-m", "0", fmt.Sprintf("--simple-connect=apn=%s,ip-type=%s", req.APN, req.IPType))
+		}
 	case "disconnect":
 		_, _ = runCmd(5*time.Second, "nmcli", "connection", "down", "lte")
 		out, err = runCmd(10*time.Second, "mmcli", "-m", "0", "--simple-disconnect")
 	case "reset":
-		out, err = runCmd(10*time.Second, "mmcli", "-m", "0", "--reset")
+		go func() {
+			_ = os.WriteFile("/sys/class/remoteproc/remoteproc0/state", []byte("stop"), 0644)
+			_, _ = runCmd(3*time.Second, "modprobe", "-r", "qcom_bam_dmux")
+			_, _ = runCmd(3*time.Second, "modprobe", "qcom_bam_dmux")
+			_ = os.WriteFile("/sys/class/remoteproc/remoteproc0/state", []byte("start"), 0644)
+			time.Sleep(10 * time.Second)
+			_, _ = runCmd(5*time.Second, "rc-service", "modemmanager", "restart")
+			_, _ = runCmd(5*time.Second, "systemctl", "restart", "ModemManager")
+			time.Sleep(8 * time.Second)
+			_, _ = runCmd(5*time.Second, "mmcli", "-m", "0", "--set-power-state-on")
+			_, _ = runCmd(5*time.Second, "mmcli", "-m", "0", "-e")
+			time.Sleep(2 * time.Second)
+			_, _ = runCmd(15*time.Second, "nmcli", "connection", "up", "lte")
+		}()
+		out = "Restarting Qualcomm QDSP6 Modem DSP & BAM-DMUX (~20s)..."
 	case "power_low":
 		out, err = runCmd(8*time.Second, "mmcli", "-m", "0", "--set-power-state-low")
 	case "power_on":
@@ -2249,8 +2271,9 @@ func start4GWatchdog() {
 
 			_, _ = runCmd(4*time.Second, "mmcli", "-m", "0", "--set-power-state-on")
 			_, _ = runCmd(4*time.Second, "mmcli", "-m", "0", "-e")
-			_, _ = runCmd(10*time.Second, "nmcli", "connection", "up", "lte")
-			_, _ = runCmd(15*time.Second, "mmcli", "-m", "0", "--simple-connect=apn=byu,ip-type=ipv4")
+			if _, err := runCmd(15*time.Second, "nmcli", "connection", "up", "lte"); err != nil {
+				_, _ = runCmd(15*time.Second, "mmcli", "-m", "0", "--simple-connect=apn=byu,ip-type=ipv4")
+			}
 		}
 	}()
 }
