@@ -33,6 +33,10 @@ var (
 	lastCPUPct     float64
 	signalSetupRun bool
 
+	modemCacheMu   sync.Mutex
+	modemCacheData map[string]any
+	modemCacheTime time.Time
+
 	watchdogMu        sync.Mutex
 	watchdogEnabled   = true
 	watchdogLastCheck string
@@ -523,12 +527,19 @@ func getCPUInfo() map[string]any {
 	gov := readFileTrim("/sys/devices/system/cpu/cpu0/cpufreq/scaling_governor")
 	availGovs := strings.Fields(readFileTrim("/sys/devices/system/cpu/cpu0/cpufreq/scaling_available_governors"))
 	availFreqs := strings.Fields(readFileTrim("/sys/devices/system/cpu/cpu0/cpufreq/scaling_available_frequencies"))
+	onlineCores := 1
+	for i := 1; i < 4; i++ {
+		if readFileTrim(fmt.Sprintf("/sys/devices/system/cpu/cpu%d/online", i)) != "0" {
+			onlineCores++
+		}
+	}
 	return map[string]any{
 		"usage_pct":             sampleCPU(),
 		"cur_freq_mhz":          curFreq / 1000,
 		"max_freq_mhz":          maxFreq / 1000,
 		"min_freq_mhz":          minFreq / 1000,
 		"governor":              gov,
+		"online_cores":          onlineCores,
 		"available_governors":   availGovs,
 		"available_frequencies": availFreqs,
 	}
@@ -831,6 +842,14 @@ func extractKV(kvOut, key string) string {
 }
 
 func getModemStatus() map[string]any {
+	modemCacheMu.Lock()
+	if modemCacheData != nil && time.Since(modemCacheTime) < 15*time.Second {
+		cached := modemCacheData
+		modemCacheMu.Unlock()
+		return cached
+	}
+	modemCacheMu.Unlock()
+
 	out, err := runCmd(3*time.Second, "mmcli", "-m", "0", "-K")
 	modemIdx := "0"
 	if err != nil {
@@ -927,7 +946,7 @@ func getModemStatus() map[string]any {
 	}
 	_ = bearerPrefix
 
-	return map[string]any{
+	res := map[string]any{
 		"present":       true,
 		"state":         state,
 		"power_state":   powerState,
@@ -953,6 +972,11 @@ func getModemStatus() map[string]any {
 		"bearer_dns":    bearerDNS,
 		"bearer_uptime": bearerUptime,
 	}
+	modemCacheMu.Lock()
+	modemCacheData = res
+	modemCacheTime = time.Now()
+	modemCacheMu.Unlock()
+	return res
 }
 
 func handleStatus(w http.ResponseWriter, r *http.Request) {
@@ -1468,6 +1492,9 @@ func startHotspotAP(cfg HotspotConfig) (string, error) {
 		"--pid-file=/run/dnsmasq-wlan0.pid",
 	)
 
+	// Lower WiFi TX power from 20 dBm (100 mW) to 10 dBm (10 mW) so WCN3620 runs cool
+	_, _ = runCmd(2*time.Second, "iw", "dev", "wlan0", "set", "txpower", "fixed", "1000")
+
 	// Enable IPv4 forwarding, NAT masquerading on wwan0, Captive Portal firewall, and ensure 4G default route is active
 	_ = os.WriteFile("/proc/sys/net/ipv4/ip_forward", []byte("1"), 0644)
 	_, _ = runCmd(3*time.Second, "iptables", "-t", "nat", "-A", "POSTROUTING", "-o", "wwan0", "-j", "MASQUERADE")
@@ -1898,6 +1925,32 @@ func handleLEDControl(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "leds": getLEDs()})
 }
 
+func applyCoolingProfile(governor string, maxFreqMHz int, cores int, txPowerDBm int) {
+	if cores <= 0 {
+		cores = 2
+	}
+	for i := 1; i < 4; i++ {
+		onlineVal := "0"
+		if i < cores {
+			onlineVal = "1"
+		}
+		_ = os.WriteFile(fmt.Sprintf("/sys/devices/system/cpu/cpu%d/online", i), []byte(onlineVal), 0644)
+	}
+	for i := 0; i < 4; i++ {
+		base := fmt.Sprintf("/sys/devices/system/cpu/cpu%d/cpufreq", i)
+		if governor != "" {
+			_ = os.WriteFile(base+"/scaling_governor", []byte(governor), 0644)
+		}
+		if maxFreqMHz > 0 {
+			_ = os.WriteFile(base+"/scaling_max_freq", []byte(strconv.Itoa(maxFreqMHz*1000)), 0644)
+		}
+	}
+	if txPowerDBm > 0 {
+		// iw uses millibel-milliwatts (1 dBm = 100 mBm)
+		_, _ = runCmd(2*time.Second, "iw", "dev", "wlan0", "set", "txpower", "fixed", strconv.Itoa(txPowerDBm*100))
+	}
+}
+
 func handleCPUControl(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		writeJSON(w, http.StatusOK, getCPUInfo())
@@ -1906,20 +1959,14 @@ func handleCPUControl(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Governor   string `json:"governor"`
 		MaxFreqMHz int    `json:"max_freq_mhz"`
+		Cores      int    `json:"cores"`
+		TxPowerDBm int    `json:"tx_power_dbm"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		writeJSON(w, http.StatusBadRequest, map[string]any{"error": "invalid body"})
 		return
 	}
-	for i := 0; i < 4; i++ {
-		base := fmt.Sprintf("/sys/devices/system/cpu/cpu%d/cpufreq", i)
-		if req.Governor != "" {
-			_ = os.WriteFile(base+"/scaling_governor", []byte(req.Governor), 0644)
-		}
-		if req.MaxFreqMHz > 0 {
-			_ = os.WriteFile(base+"/scaling_max_freq", []byte(strconv.Itoa(req.MaxFreqMHz*1000)), 0644)
-		}
-	}
+	applyCoolingProfile(req.Governor, req.MaxFreqMHz, req.Cores, req.TxPowerDBm)
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "cpu": getCPUInfo()})
 }
 
@@ -2331,6 +2378,12 @@ func main() {
 
 	loadStore()
 	sampleCPU()
+	// Default to Cool Dual-Core 533 MHz + 10 dBm WiFi TX + All LEDs OFF on startup so chip stays < 55C
+	applyCoolingProfile("schedutil", 534, 2, 10)
+	for _, l := range getLEDs() {
+		_ = os.WriteFile("/sys/class/leds/"+l.Name+"/trigger", []byte("none"), 0644)
+		_ = os.WriteFile("/sys/class/leds/"+l.Name+"/brightness", []byte("0"), 0644)
+	}
 	syncCaptiveFirewall()
 	start4GWatchdog()
 	startVoucherEnforcer()

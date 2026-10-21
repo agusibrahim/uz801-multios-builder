@@ -1,31 +1,116 @@
 // SPDX-License-Identifier: GPL-2.0-only
+/*
+ * Custom Thermal-Tuned, RAM-Unlocked & OPP-Extended Device Tree
+ * for Yiming UZ801 v3.0 (Qualcomm Snapdragon 410 / MSM8916)
+ */
 
 /dts-v1/;
 
 #include "msm8916-ufi.dtsi"
-#include <dt-bindings/leds/common.h>
 
 / {
-	model = "uz801 v3.0 4G Modem Stick";
+	model = "uz801 v3.0 4G Modem Stick (Cool & RAM-Unlocked Edition)";
 	compatible = "yiming,uz801-v3", "qcom,msm8916";
+
+	thermal-zones {
+		cpu0-1-thermal {
+			polling-delay = <1000>;
+			polling-delay-passive = <250>;
+		};
+
+		cpu2-3-thermal {
+			polling-delay = <1000>;
+			polling-delay-passive = <250>;
+		};
+
+		modem-thermal {
+			polling-delay = <1000>;
+			polling-delay-passive = <250>;
+
+			cooling-maps {
+				map0 {
+					trip = <&modem_alert0>;
+					cooling-device = <&CPU0 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&CPU1 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&CPU2 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>,
+							 <&CPU3 THERMAL_NO_LIMIT THERMAL_NO_LIMIT>;
+				};
+			};
+		};
+	};
+};
+
+/* Lower thermal throttling trip points from 75-85C down to 54C to keep chip < 60C */
+&cpu0_1_alert0 {
+	temperature = <54000>;
+	hysteresis = <2000>;
+};
+
+&cpu2_3_alert0 {
+	temperature = <54000>;
+	hysteresis = <2000>;
+};
+
+&gpu_alert0 {
+	temperature = <55000>;
+	hysteresis = <2000>;
+};
+
+&cam_alert0 {
+	temperature = <55000>;
+	hysteresis = <2000>;
+};
+
+&modem_alert0 {
+	temperature = <55000>;
+	hysteresis = <2000>;
+	type = "passive";
+};
+
+/* Unlock 533 MHz sweet-spot cool frequency & 1.15 GHz Turbo Overclock */
+&cpu_opp_table {
+	opp-533333333 {
+		opp-hz = /bits/ 64 <533333333>;
+	};
+
+	opp-1152000000 {
+		opp-hz = /bits/ 64 <1152000000>;
+	};
+};
+
+/* Shrink MPSS carveout from 85 MB (0x5500000) to exact 82 MB (0x5200000) -> +3 MB RAM */
+&mpss_mem {
+	reg = <0x0 0x86800000 0x0 0x5200000>;
+	status = "okay";
+};
+
+/* Disable unused Venus H.264 video decoder/encoder hardware -> +5 MB RAM & lower heat */
+&venus {
+	status = "disabled";
+};
+
+&venus_mem {
+	status = "disabled";
 };
 
 &button_restart {
 	gpios = <&tlmm 23 GPIO_ACTIVE_LOW>;
 };
 
+/* Keep all LEDs off by default at boot to reduce PCB heat & glare */
 &led_b {
 	gpios = <&tlmm 6 GPIO_ACTIVE_HIGH>;
-	function = LED_FUNCTION_WLAN;
+	default-state = "off";
 };
 
 &led_g {
 	gpios = <&tlmm 8 GPIO_ACTIVE_HIGH>;
-	function = LED_FUNCTION_WAN;
+	default-state = "off";
 };
 
 &led_r {
 	gpios = <&tlmm 7 GPIO_ACTIVE_HIGH>;
+	default-state = "off";
 };
 
 &button_default {

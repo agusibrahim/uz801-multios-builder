@@ -72,29 +72,33 @@ case "$OS_CHOICE" in
     kali)        ROOTFS_GZ="$FILES_DIR/kali-rootfs.img.gz" ;;
     alma|almalinux) ROOTFS_GZ="$FILES_DIR/alma-rootfs.img.gz" ;;
     goos)        ROOTFS_GZ="$FILES_DIR/goos-rootfs.img.gz" ;;
+    boot)        ROOTFS_GZ="" ;;
     *)
-        echo "[-] Unknown OS: $OS_CHOICE (choose: alpine, void, arch, dietpi, immortalwrt, ubuntu, chimera, pmos, kali, alma, goos)"
+        echo "[-] Unknown OS: $OS_CHOICE (choose: alpine, void, arch, dietpi, immortalwrt, ubuntu, chimera, pmos, kali, alma, goos, boot)"
         exit 1
         ;;
 esac
 
 BOOT_GZ="$FILES_DIR/boot.img.gz"
 
-[[ -f "$BOOT_GZ" ]]   || { echo "[-] Missing $BOOT_GZ"; exit 1; }
-[[ -f "$ROOTFS_GZ" ]] || { echo "[-] Missing $ROOTFS_GZ"; exit 1; }
+[[ -f "$BOOT_GZ" ]] || { echo "[-] Missing $BOOT_GZ"; exit 1; }
+if [[ "$OS_CHOICE" != "boot" ]]; then
+    [[ -f "$ROOTFS_GZ" ]] || { echo "[-] Missing $ROOTFS_GZ"; exit 1; }
+fi
 
 echo "=== Target Flash Configuration ==="
-echo "[+] OS Image : $OS_CHOICE ($(basename "$ROOTFS_GZ"))"
+echo "[+] Target   : $OS_CHOICE"
 echo "[+] Boot Img : $(basename "$BOOT_GZ")"
-echo "[+] Mode     : $([[ "$FULL_MODE" == true ]] && echo "FULL (GPT + Firmware + Radio + Boot + Rootfs)" || echo "LITE (Boot + Rootfs only)")"
 echo
 
 raw_tmp="$(mktemp -d)"
 trap 'rm -rf "$raw_tmp"' EXIT
 
-echo "=== Decompressing boot & $OS_CHOICE rootfs ==="
-gunzip -c "$BOOT_GZ"   > "${raw_tmp}/boot.raw"
-gunzip -c "$ROOTFS_GZ" > "${raw_tmp}/rootfs.raw"
+echo "=== Decompressing image(s) ==="
+gunzip -c "$BOOT_GZ" > "${raw_tmp}/boot.raw"
+if [[ "$OS_CHOICE" != "boot" ]]; then
+    gunzip -c "$ROOTFS_GZ" > "${raw_tmp}/rootfs.raw"
+fi
 
 if command -v adb >/dev/null 2>&1 && adb devices 2>/dev/null | grep -q "2c2d59162055f8d2"; then
     echo "=== Rebooting device from ADB to Fastboot (lk2nd) ==="
@@ -146,8 +150,10 @@ fi
 echo "=== Flashing boot ==="
 edl w boot "${raw_tmp}/boot.raw"
 
-echo "=== Flashing $OS_CHOICE rootfs ==="
-edl w rootfs "${raw_tmp}/rootfs.raw"
+if [[ "$OS_CHOICE" != "boot" ]]; then
+    echo "=== Flashing $OS_CHOICE rootfs ==="
+    edl w rootfs "${raw_tmp}/rootfs.raw"
+fi
 
 echo "=== Rebooting device ==="
 edl reset || true

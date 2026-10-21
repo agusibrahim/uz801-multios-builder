@@ -1348,12 +1348,12 @@
             </div>
             <div id="thermal-list" class="kv-list"></div>
             <div>
-              <label class="label">Pilih Profil Pendinginan & Performa CPU:</label>
+              <label class="label">Pilih Profil Pendinginan, Jumlah Core CPU & Daya Pancar WiFi:</label>
               <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;">
-                <button class="btn btn-outline btn-sm" onclick="setCPU('powersave', 400)">❄️ Super Adem (400 MHz)</button>
-                <button class="btn btn-outline btn-sm" onclick="setCPU('schedutil', 533)">🍃 Dingin & Stabil (533 MHz)</button>
-                <button class="btn btn-outline btn-sm" onclick="setCPU('schedutil', 800)">⚖️ Seimbang (800 MHz)</button>
-                <button class="btn btn-primary btn-sm" onclick="setCPU('schedutil', 998)">⚡ Performa Penuh (998 MHz)</button>
+                <button class="btn btn-outline btn-sm" onclick="setCPU('powersave', 400, 2, 8)">❄️ Super Adem (2 Core · 400 MHz · WiFi 8 dBm)</button>
+                <button class="btn btn-primary btn-sm" onclick="setCPU('schedutil', 534, 2, 10)">🍃 Dingin & Stabil (2 Core · 533 MHz · WiFi 10 dBm)</button>
+                <button class="btn btn-outline btn-sm" onclick="setCPU('schedutil', 800, 4, 14)">⚖️ Seimbang (4 Core · 800 MHz · WiFi 14 dBm)</button>
+                <button class="btn btn-outline btn-sm" onclick="setCPU('schedutil', 1152, 4, 20)">🚀 Turbo Overclock (4 Core · 1.15 GHz · WiFi 20 dBm)</button>
               </div>
             </div>
           </div>
@@ -1719,8 +1719,9 @@
         const cpuPct = (d.cpu?.usage_pct || 0).toFixed(1);
         document.getElementById('ov-cpu-pct').textContent = `${cpuPct}%`;
         document.getElementById('ov-cpu-bar').style.width = `${Math.min(100, cpuPct)}%`;
-        document.getElementById('ov-cpu-freq').textContent = `${d.cpu?.cur_freq_mhz || 0} / ${d.cpu?.max_freq_mhz || 0} MHz`;
-        document.getElementById('hw-cur-freq').textContent = `${d.cpu?.cur_freq_mhz || 0} MHz (${d.cpu?.governor || ''})`;
+        const cores = d.cpu?.online_cores || 4;
+        document.getElementById('ov-cpu-freq').textContent = `${cores}C · ${d.cpu?.cur_freq_mhz || 0}/${d.cpu?.max_freq_mhz || 0} MHz`;
+        document.getElementById('hw-cur-freq').textContent = `${cores} Core Aktif · ${d.cpu?.cur_freq_mhz || 0}/${d.cpu?.max_freq_mhz || 0} MHz (${d.cpu?.governor || ''})`;
         document.getElementById('ov-gov').textContent = d.cpu?.governor || '--';
         document.getElementById('ov-load').textContent = (d.load_avg || '').split(' ').slice(0, 3).join(' ');
 
@@ -2135,13 +2136,13 @@
       refreshAll();
     }
 
-    async function setCPU(governor, max_freq_mhz) {
+    async function setCPU(governor, max_freq_mhz, cores = 2, tx_power_dbm = 10) {
       await fetch('/api/cpu', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({governor, max_freq_mhz})
+        body: JSON.stringify({governor, max_freq_mhz, cores, tx_power_dbm})
       });
-      showToast(`Profil CPU diterapkan: ${governor} (Maks ${max_freq_mhz} MHz)`);
+      showToast(`Profil diterapkan: ${cores} Core @ Maks ${max_freq_mhz} MHz (WiFi ${tx_power_dbm} dBm)`);
       refreshAll();
     }
 
