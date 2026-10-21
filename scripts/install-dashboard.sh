@@ -49,7 +49,17 @@ EOF
 fi
 
 echo "[*] Installing and starting uz801-dashboard service (2-Core 533MHz + 10dBm WiFi Cool Profile)..."
-adb -s "$SERIAL" shell "mv -f /tmp/uz801-dashboard.new /usr/bin/uz801-dashboard && chmod 0755 /usr/bin/uz801-dashboard /usr/sbin/usb-gadget && (nohup /usr/bin/uz801-dashboard >/run/uz801-dashboard.log 2>&1 </dev/null &); sleep 1; cat /run/uz801-dashboard.log"
+adb -s "$SERIAL" shell "
+    mv -f /tmp/uz801-dashboard.new /usr/bin/uz801-dashboard
+    chmod 0755 /usr/bin/uz801-dashboard /usr/sbin/usb-gadget
+    killall -9 uz801-dashboard 2>/dev/null || true
+    sleep 2
+    if ! pidof uz801-dashboard >/dev/null 2>&1; then
+        (nohup /usr/bin/uz801-dashboard >/run/uz801-dashboard.log 2>&1 </dev/null &)
+        sleep 1
+    fi
+    ps | grep uz801-dashboard
+"
 
 echo ""
 echo "[+] UZ801 Modem Manager Dashboard + Thermal/RAM Kernel DTB installed!"

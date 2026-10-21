@@ -67,20 +67,57 @@
 	type = "passive";
 };
 
-/* Unlock 533 MHz sweet-spot cool frequency & 1.15 GHz Turbo Overclock */
+/* Enable PM8916 SPMI s2 buck regulator (vdd_apc) for Dynamic CPU Undervolting (0.95V - 1.325V) */
+&pm8916_1 {
+	pm8916_spmi_regulators: regulators {
+		compatible = "qcom,pm8916-regulators";
+
+		pm8916_spmi_s2: s2 {
+			regulator-name = "vdd_apc";
+			regulator-min-microvolt = <950000>;
+			regulator-max-microvolt = <1350000>;
+			regulator-always-on;
+			regulator-boot-on;
+		};
+	};
+};
+
+&CPU0 {
+	cpu-supply = <&pm8916_spmi_s2>;
+};
+
+/* Unlock 533 MHz sweet-spot cool frequency, 1.15 GHz Turbo Overclock, and SVS2 Deep Undervolt table */
 &cpu_opp_table {
+	opp-200000000 {
+		opp-microvolt = <950000 950000 1350000>;
+	};
+
+	opp-400000000 {
+		opp-microvolt = <975000 975000 1350000>;
+	};
+
 	opp-533333333 {
 		opp-hz = /bits/ 64 <533333333>;
+		opp-microvolt = <1025000 1025000 1350000>;
+	};
+
+	opp-800000000 {
+		opp-microvolt = <1100000 1100000 1350000>;
+	};
+
+	opp-998400000 {
+		opp-microvolt = <1187500 1187500 1350000>;
 	};
 
 	opp-1152000000 {
 		opp-hz = /bits/ 64 <1152000000>;
+		opp-microvolt = <1300000 1300000 1350000>;
 	};
 };
 
-/* Shrink MPSS carveout from 85 MB (0x5500000) to exact 82 MB (0x5200000) -> +3 MB RAM */
+/* Keep MPSS carveout at 0x5500000 so WCNSS does not overlap MPSS internal heap */
 &mpss_mem {
-	reg = <0x0 0x86800000 0x0 0x5200000>;
+	reg = <0x0 0x86800000 0x0 0x5500000>;
 	status = "okay";
 };
 

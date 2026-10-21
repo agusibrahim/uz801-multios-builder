@@ -1350,6 +1350,7 @@
             <div>
               <label class="label">Pilih Profil Pendinginan, Jumlah Core CPU & Daya Pancar WiFi:</label>
               <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:4px;">
+                <button class="btn btn-outline btn-sm" onclick="setCPU('powersave', 200, 1, 8)">🧊 Es Batu (1 Core · 200 MHz · WiFi 8 dBm)</button>
                 <button class="btn btn-outline btn-sm" onclick="setCPU('powersave', 400, 2, 8)">❄️ Super Adem (2 Core · 400 MHz · WiFi 8 dBm)</button>
                 <button class="btn btn-primary btn-sm" onclick="setCPU('schedutil', 534, 2, 10)">🍃 Dingin & Stabil (2 Core · 533 MHz · WiFi 10 dBm)</button>
                 <button class="btn btn-outline btn-sm" onclick="setCPU('schedutil', 800, 4, 14)">⚖️ Seimbang (4 Core · 800 MHz · WiFi 14 dBm)</button>
@@ -2209,7 +2210,9 @@
     }
 
     refreshAll();
-    setInterval(refreshAll, 3000);
+    setInterval(() => {
+      if (!document.hidden) refreshAll();
+    }, 5000);
   </script>
 </body>
 </html>

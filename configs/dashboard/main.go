@@ -20,6 +20,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -36,6 +37,10 @@ var (
 	modemCacheMu   sync.Mutex
 	modemCacheData map[string]any
 	modemCacheTime time.Time
+
+	clientsCacheMu   sync.Mutex
+	clientsCacheData []ConnectedClient
+	clientsCacheTime time.Time
 
 	watchdogMu        sync.Mutex
 	watchdogEnabled   = true
@@ -365,19 +370,18 @@ type NetInterface struct {
 
 func getInterfaces() []NetInterface {
 	var list []NetInterface
-	ipOut, _ := runCmd(2*time.Second, "ip", "-o", "addr", "show")
 	ipv4Map := map[string][]string{}
 	ipv6Map := map[string][]string{}
-	for _, line := range strings.Split(ipOut, "\n") {
-		f := strings.Fields(line)
-		if len(f) >= 4 {
-			ifname := f[1]
-			family := f[2]
-			cidr := f[3]
-			if family == "inet" {
-				ipv4Map[ifname] = append(ipv4Map[ifname], cidr)
-			} else if family == "inet6" {
-				ipv6Map[ifname] = append(ipv6Map[ifname], cidr)
+	if netIfs, err := net.Interfaces(); err == nil {
+		for _, nif := range netIfs {
+			addrs, _ := nif.Addrs()
+			for _, a := range addrs {
+				s := a.String()
+				if strings.Contains(s, ":") {
+					ipv6Map[nif.Name] = append(ipv6Map[nif.Name], s)
+				} else {
+					ipv4Map[nif.Name] = append(ipv4Map[nif.Name], s)
+				}
 			}
 		}
 	}
@@ -501,20 +505,18 @@ func getMemoryInfo() map[string]uint64 {
 }
 
 func getDiskInfo() map[string]any {
-	out, _ := runCmd(2*time.Second, "df", "-k", "/")
-	lines := strings.Split(out, "\n")
-	if len(lines) >= 2 {
-		f := strings.Fields(lines[len(lines)-1])
-		if len(f) >= 5 {
-			totKB, _ := strconv.ParseUint(f[1], 10, 64)
-			usedKB, _ := strconv.ParseUint(f[2], 10, 64)
-			availKB, _ := strconv.ParseUint(f[3], 10, 64)
-			return map[string]any{
-				"total_bytes": totKB * 1024,
-				"used_bytes":  usedKB * 1024,
-				"avail_bytes": availKB * 1024,
-				"use_pct":     strings.TrimSuffix(f[4], "%"),
-			}
+	var st syscall.Statfs_t
+	if err := syscall.Statfs("/", &st); err == nil && st.Blocks > 0 {
+		tot := st.Blocks * uint64(st.Bsize)
+		avail := st.Bavail * uint64(st.Bsize)
+		free := st.Bfree * uint64(st.Bsize)
+		used := tot - free
+		pct := int((used * 100) / tot)
+		return map[string]any{
+			"total_bytes": tot,
+			"used_bytes":  used,
+			"avail_bytes": avail,
+			"use_pct":     strconv.Itoa(pct),
 		}
 	}
 	return map[string]any{}
@@ -576,8 +578,15 @@ func getDHCPLeases() []map[string]string {
 	return leases
 }
 
-// Discover all connected clients across WiFi AP/STA and USB, with signal, bytes, and voucher status
 func discoverConnectedClients() []ConnectedClient {
+	clientsCacheMu.Lock()
+	if clientsCacheData != nil && time.Since(clientsCacheTime) < 8*time.Second {
+		res := clientsCacheData
+		clientsCacheMu.Unlock()
+		return res
+	}
+	clientsCacheMu.Unlock()
+
 	leases := getDHCPLeases()
 	byMAC := map[string]*ConnectedClient{}
 	for _, l := range leases {
@@ -595,26 +604,19 @@ func discoverConnectedClients() []ConnectedClient {
 		}
 	}
 
-	// Merge ip neigh show
-	neighOut, _ := runCmd(2*time.Second, "ip", "neigh", "show")
-	for _, line := range strings.Split(neighOut, "\n") {
+	// Merge /proc/net/arp directly without spawning ip neigh subprocess
+	arpRaw := readFileTrim("/proc/net/arp")
+	for idx, line := range strings.Split(arpRaw, "\n") {
+		if idx == 0 {
+			continue
+		}
 		f := strings.Fields(line)
-		// e.g. 192.168.42.184 dev usb0 lladdr aa:bb:cc:dd:ee:ff REACHABLE
-		if len(f) >= 5 {
+		if len(f) >= 6 {
 			ip := f[0]
-			if strings.Contains(ip, ":") {
-				continue // skip IPv6 link-local for primary display
-			}
-			var dev, mac, state string
-			for i := 1; i < len(f); i++ {
-				if f[i] == "dev" && i+1 < len(f) {
-					dev = f[i+1]
-				} else if f[i] == "lladdr" && i+1 < len(f) {
-					mac = strings.ToLower(f[i+1])
-				}
-			}
-			state = f[len(f)-1]
-			if mac == "" || dev == "wwan0" {
+			flags := f[2]
+			mac := strings.ToLower(f[3])
+			dev := f[5]
+			if mac == "00:00:00:00:00:00" || dev == "wwan0" || flags == "0x0" {
 				continue
 			}
 			c, ok := byMAC[mac]
@@ -633,7 +635,7 @@ func discoverConnectedClients() []ConnectedClient {
 			if dev != "" {
 				c.Interface = dev
 			}
-			c.Reachable = state
+			c.Reachable = "REACHABLE"
 		}
 	}
 
@@ -742,6 +744,10 @@ func discoverConnectedClients() []ConnectedClient {
 		result = append(result, *c)
 	}
 	sort.Slice(result, func(i, j int) bool { return result[i].IP < result[j].IP })
+	clientsCacheMu.Lock()
+	clientsCacheData = result
+	clientsCacheTime = time.Now()
+	clientsCacheMu.Unlock()
 	return result
 }
 
@@ -785,23 +791,28 @@ func getUSBGadgetConfig() map[string]any {
 }
 
 func getRoutesAndNAT() map[string]any {
-	routeOut, _ := runCmd(2*time.Second, "ip", "route", "show", "default")
 	ipForward := readFileTrim("/proc/sys/net/ipv4/ip_forward") == "1"
 	primaryDev := ""
 	var defaults []string
-	for _, l := range strings.Split(routeOut, "\n") {
-		l = strings.TrimSpace(l)
-		if l == "" {
+	routeRaw := readFileTrim("/proc/net/route")
+	for idx, l := range strings.Split(routeRaw, "\n") {
+		if idx == 0 {
 			continue
 		}
-		defaults = append(defaults, l)
-		if primaryDev == "" {
-			f := strings.Fields(l)
-			for i := 0; i < len(f)-1; i++ {
-				if f[i] == "dev" {
-					primaryDev = f[i+1]
-					break
-				}
+		f := strings.Fields(l)
+		if len(f) >= 8 && f[1] == "00000000" {
+			dev := f[0]
+			gwHex := f[2]
+			metric := f[6]
+			if primaryDev == "" {
+				primaryDev = dev
+			}
+			if len(gwHex) == 8 {
+				b0, _ := strconv.ParseUint(gwHex[6:8], 16, 8)
+				b1, _ := strconv.ParseUint(gwHex[4:6], 16, 8)
+				b2, _ := strconv.ParseUint(gwHex[2:4], 16, 8)
+				b3, _ := strconv.ParseUint(gwHex[0:2], 16, 8)
+				defaults = append(defaults, fmt.Sprintf("default via %d.%d.%d.%d dev %s metric %s", b0, b1, b2, b3, dev, metric))
 			}
 		}
 	}
@@ -869,7 +880,8 @@ func getModemStatus() map[string]any {
 	}
 
 	if !signalSetupRun {
-		_, _ = runCmd(2*time.Second, "mmcli", "-m", modemIdx, "--signal-setup=5")
+		// Disable continuous 5s RF polling so QDSP6 baseband can enter DRX sleep and stay cool
+		_, _ = runCmd(2*time.Second, "mmcli", "-m", modemIdx, "--signal-setup=0")
 		signalSetupRun = true
 	}
 
@@ -981,7 +993,7 @@ func getModemStatus() map[string]any {
 
 func handleStatus(w http.ResponseWriter, r *http.Request) {
 	osPretty, osID := getOSPrettyName()
-	kernel, _ := runCmd(1*time.Second, "uname", "-r")
+	kernel := readFileTrim("/proc/sys/kernel/osrelease")
 	hostname, _ := os.Hostname()
 	upRaw := readFileTrim("/proc/uptime")
 	var upSec float64
@@ -1244,6 +1256,9 @@ func handleClientsAction(w http.ResponseWriter, r *http.Request) {
 		_, _ = runCmd(2*time.Second, "iptables", "-C", "FORWARD", "-s", req.IP)
 	}
 
+	clientsCacheMu.Lock()
+	clientsCacheTime = time.Time{}
+	clientsCacheMu.Unlock()
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "clients": discoverConnectedClients()})
 }
 
@@ -1432,6 +1447,9 @@ func handleVouchers(w http.ResponseWriter, r *http.Request) {
 		saveStoreLocked()
 	}
 
+	clientsCacheMu.Lock()
+	clientsCacheTime = time.Time{}
+	clientsCacheMu.Unlock()
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "vouchers": appStore.Vouchers})
 	go syncCaptiveFirewall()
 }
@@ -1492,8 +1510,8 @@ func startHotspotAP(cfg HotspotConfig) (string, error) {
 		"--pid-file=/run/dnsmasq-wlan0.pid",
 	)
 
-	// Lower WiFi TX power from 20 dBm (100 mW) to 10 dBm (10 mW) so WCN3620 runs cool
-	_, _ = runCmd(2*time.Second, "iw", "dev", "wlan0", "set", "txpower", "fixed", "1000")
+	// Lower WiFi TX power from 20 dBm (100 mW) to 8 dBm (6 mW) on phy0 so WCN3620 runs cool
+	_, _ = runCmd(2*time.Second, "iw", "phy", "phy0", "set", "txpower", "fixed", "800")
 
 	// Enable IPv4 forwarding, NAT masquerading on wwan0, Captive Portal firewall, and ensure 4G default route is active
 	_ = os.WriteFile("/proc/sys/net/ipv4/ip_forward", []byte("1"), 0644)
@@ -1566,6 +1584,20 @@ func handleHotspotConfig(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": err == nil, "output": out, "hotspot": cfg})
 }
 
+func wlan0HasHotspotIP() bool {
+	nif, err := net.InterfaceByName("wlan0")
+	if err != nil {
+		return false
+	}
+	addrs, _ := nif.Addrs()
+	for _, a := range addrs {
+		if strings.HasPrefix(a.String(), "192.168.43.1/") {
+			return true
+		}
+	}
+	return false
+}
+
 // Background Voucher & Client Quota / Expiry Enforcer + Hotspot Auto-Start Watchdog
 func startVoucherEnforcer() {
 	// Ensure Hotspot AP starts automatically on boot if HotspotConfig.Active == true
@@ -1579,12 +1611,10 @@ func startVoucherEnforcer() {
 				return
 			}
 			if _, err := os.Stat("/sys/class/net/wlan0"); err == nil {
-				ipOut, _ := runCmd(2*time.Second, "ip", "addr", "show", "dev", "wlan0")
-				if !strings.Contains(ipOut, "192.168.43.1") {
+				if !wlan0HasHotspotIP() {
 					log.Printf("[+] Auto-starting Hotspot AP (%s) on boot...", cfg.SSID)
 					_, _ = startHotspotAP(cfg)
 				} else {
-					// Ensure wlan0 dnsmasq and captive firewall are running
 					if pidStr := readFileTrim("/run/dnsmasq-wlan0.pid"); pidStr == "" {
 						_, _ = startHotspotAP(cfg)
 					} else {
@@ -1598,15 +1628,22 @@ func startVoucherEnforcer() {
 
 	go func() {
 		for {
-			time.Sleep(10 * time.Second)
+			time.Sleep(15 * time.Second)
 			storeMu.Lock()
 			hsCfg := appStore.HotspotConfig
-			storeMu.Unlock()
-			if hsCfg.Active {
-				ipOut, _ := runCmd(2*time.Second, "ip", "addr", "show", "dev", "wlan0")
-				if !strings.Contains(ipOut, "192.168.43.1") {
-					_, _ = startHotspotAP(hsCfg)
+			hasActiveRules := len(appStore.ClientQuotasMB) > 0
+			for _, v := range appStore.Vouchers {
+				if v.Status == "active" {
+					hasActiveRules = true
+					break
 				}
+			}
+			storeMu.Unlock()
+			if hsCfg.Active && !wlan0HasHotspotIP() {
+				_, _ = startHotspotAP(hsCfg)
+			}
+			if !hasActiveRules {
+				continue
 			}
 			clients := discoverConnectedClients()
 			clientBytesByMAC := map[string]uint64{}
@@ -1946,8 +1983,8 @@ func applyCoolingProfile(governor string, maxFreqMHz int, cores int, txPowerDBm 
 		}
 	}
 	if txPowerDBm > 0 {
-		// iw uses millibel-milliwatts (1 dBm = 100 mBm)
-		_, _ = runCmd(2*time.Second, "iw", "dev", "wlan0", "set", "txpower", "fixed", strconv.Itoa(txPowerDBm*100))
+		// On wcn36xx, txpower must be set on phy0 (1 dBm = 100 mBm)
+		_, _ = runCmd(2*time.Second, "iw", "phy", "phy0", "set", "txpower", "fixed", strconv.Itoa(txPowerDBm*100))
 	}
 }
 
@@ -2328,6 +2365,9 @@ func handlePortalLogin(w http.ResponseWriter, r *http.Request) {
 	storeMu.Unlock()
 
 	// Synchronously update iptables & nftables QoS BEFORE returning response so phone CPD probe immediately succeeds!
+	clientsCacheMu.Lock()
+	clientsCacheTime = time.Time{}
+	clientsCacheMu.Unlock()
 	syncCaptiveFirewall()
 
 	writeJSON(w, http.StatusOK, map[string]any{
@@ -2338,23 +2378,37 @@ func handlePortalLogin(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+func wwan0HasIP() bool {
+	nif, err := net.InterfaceByName("wwan0")
+	if err != nil {
+		return false
+	}
+	addrs, _ := nif.Addrs()
+	for _, a := range addrs {
+		if !strings.Contains(a.String(), ":") {
+			return true
+		}
+	}
+	return false
+}
+
 func start4GWatchdog() {
 	go func() {
 		for {
-			time.Sleep(45 * time.Second)
+			time.Sleep(60 * time.Second)
 			watchdogMu.Lock()
 			en := watchdogEnabled
 			watchdogMu.Unlock()
 			if !en {
 				continue
 			}
-			_, err := runCmd(5*time.Second, "ping", "-I", "wwan0", "-c", "1", "-W", "3", "1.1.1.1")
-			watchdogMu.Lock()
-			if err == nil {
+			if wwan0HasIP() {
+				watchdogMu.Lock()
 				watchdogLastCheck = time.Now().Format("15:04:05") + " (OK)"
 				watchdogMu.Unlock()
 				continue
 			}
+			watchdogMu.Lock()
 			watchdogLastCheck = time.Now().Format("15:04:05") + " (Reconnecting...)"
 			watchdogRestarts++
 			watchdogMu.Unlock()
@@ -2372,6 +2426,15 @@ func main() {
 	_ = os.Setenv("PATH", "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin")
 	_ = os.Setenv("LC_ALL", "C")
 	_ = os.Chdir("/")
+
+	// Ensure single instance via flock
+	lockFile, err := os.OpenFile("/run/uz801-dashboard.lock", os.O_CREATE|os.O_RDWR, 0644)
+	if err == nil {
+		if err := syscall.Flock(int(lockFile.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
+			log.Printf("[-] Another uz801-dashboard instance is already running, exiting.")
+			os.Exit(0)
+		}
+	}
 
 	addr := flag.String("addr", "", "HTTP listen address (default: :80 with fallback to :8080)")
 	flag.Parse()

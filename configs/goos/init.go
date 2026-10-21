@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"os/exec"
@@ -101,6 +102,20 @@ func reapZombies() {
 			}
 		}
 	}()
+}
+
+func ifaceHasIPv4(name string) bool {
+	nif, err := net.InterfaceByName(name)
+	if err != nil {
+		return false
+	}
+	addrs, _ := nif.Addrs()
+	for _, a := range addrs {
+		if !strings.Contains(a.String(), ":") {
+			return true
+		}
+	}
+	return false
 }
 
 func main() {
@@ -215,13 +230,20 @@ func main() {
 	supervise("dropbear", "dropbear", "-F", "-E", "-R")
 	supervise("uz801-dashboard", "uz801-dashboard")
 
-	// 11. Background 4G LTE autoconnect & HTTP Date clock sync
+	// 11. Background 4G LTE autoconnect & HTTP Date clock sync (runs only until connected!)
 	go func() {
 		client := &http.Client{Timeout: 4 * time.Second}
 		timeSynced := false
-		for i := 0; i < 40; i++ {
+		for i := 0; i < 30; i++ {
 			_ = run("ip", "link", "set", "usb0", "up")
-			if !timeSynced {
+			if !ifaceHasIPv4("wwan0") {
+				if run("mmcli", "-m", "0") == nil {
+					_ = run("mmcli", "-m", "0", "--set-power-state-on")
+					_ = run("mmcli", "-m", "0", "-e")
+					_ = run("nmcli", "connection", "up", "lte")
+				}
+			}
+			if !timeSynced && ifaceHasIPv4("wwan0") {
 				if resp, err := client.Head("http://1.1.1.1"); err == nil {
 					dateHdr := resp.Header.Get("Date")
 					_ = resp.Body.Close()
@@ -234,10 +256,8 @@ func main() {
 					}
 				}
 			}
-			if run("mmcli", "-m", "0") == nil {
-				_ = run("mmcli", "-m", "0", "--set-power-state-on")
-				_ = run("mmcli", "-m", "0", "-e")
-				_ = run("nmcli", "connection", "up", "lte")
+			if timeSynced && ifaceHasIPv4("wwan0") {
+				break
 			}
 			time.Sleep(5 * time.Second)
 		}
