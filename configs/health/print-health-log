@@ -1,0 +1,9 @@
+#!/bin/sh
+# Cron wrapper: append health snapshot to log and cap size.
+# ponytail: runs from /etc/periodic/15min/; crond must be enabled.
+LOG=/var/log/print-health.log
+/usr/local/sbin/print-health >> "$LOG" 2>&1
+# cap at 2000 lines (~200 KB) so log growth never fills the filesystem
+if [ "$(wc -l < "$LOG" 2>/dev/null)" -gt 2000 ]; then
+    tail -2000 "$LOG" > "$LOG.tmp" && mv "$LOG.tmp" "$LOG"
+fi

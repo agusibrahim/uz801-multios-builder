@@ -1,0 +1,78 @@
+// SPDX-License-Identifier: GPL-2.0-only
+/*
+ * OctoPrint profile for the uz801 v3 class device.
+ * Disables LTE modem remoteproc + firmware memory and Venus video decode
+ * so the constrained device has more RAM available for OctoPrint.
+ * WiFi (wcnss) is intentionally kept enabled.
+ */
+
+/dts-v1/;
+
+#include "msm8916-ufi.dtsi"
+#include <dt-bindings/leds/common.h>
+
+/ {
+	model = "uz801 v3.0 4G Modem Stick (OctoPrint)";
+	compatible = "yiming,uz801-v3-octoprint", "yiming,uz801-v3", "qcom,msm8916";
+};
+
+/* Board-specific pin assignments (same as generic uz801v3) */
+&button_restart {
+	gpios = <&tlmm 23 GPIO_ACTIVE_LOW>;
+};
+
+&led_b {
+	gpios = <&tlmm 6 GPIO_ACTIVE_HIGH>;
+	function = LED_FUNCTION_WLAN;
+};
+
+&led_g {
+	gpios = <&tlmm 8 GPIO_ACTIVE_HIGH>;
+	function = LED_FUNCTION_WAN;
+};
+
+&led_r {
+	gpios = <&tlmm 7 GPIO_ACTIVE_HIGH>;
+};
+
+&button_default {
+	pins = "gpio23";
+	bias-pull-up;
+};
+
+&gpio_leds_default {
+	pins = "gpio6", "gpio7", "gpio8";
+};
+
+/* ----- LTE modem: disable remoteproc and all firmware reserved memory ----- */
+
+&mpss {
+	status = "disabled";
+};
+
+&mpss_mem {
+	status = "disabled";
+};
+
+&mba_mem {
+	status = "disabled";
+};
+
+/* BAM data multiplexer is only useful with the modem running */
+&bam_dmux {
+	status = "disabled";
+};
+
+&bam_dmux_dma {
+	status = "disabled";
+};
+
+/* ----- Venus video decode: disable remoteproc and reserved memory --------- */
+
+&venus {
+	status = "disabled";
+};
+
+&venus_mem {
+	status = "disabled";
+};

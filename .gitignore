@@ -1,0 +1,26 @@
+# Local credentials & environment overrides
+variables.env
+
+# Device-specific IMEI / EFS radio backups (NEVER commit to public repo!)
+saved/
+backup_original/
+
+# Large build artifacts & base rootfs caches (published via GitHub Releases instead)
+files/*.img.gz
+files/*.tgz
+files/*.tar.xz
+files/*.tar.gz
+files/*.img
+files/*.zip
+files/*.bin
+
+# Kernel DTS sparse checkout cache
+.kernel-dts/
+
+# Temporary / OS files
+.DS_Store
+*.log
+log.txt
+logs/
+msm8916-alpine/
+files/*.img.xz

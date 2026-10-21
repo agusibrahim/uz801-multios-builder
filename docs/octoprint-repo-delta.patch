@@ -1,0 +1,26 @@
+# OctoPrint repo delta — uncommitted change in msm8916-alpine-octoprint
+#
+# Source: /Users/hkfuertes/projects/msm8916-alpine-octoprint
+# Captured: 2026-07-08
+#
+# Summary: re-enables the webcam settings tab in OctoPrint's default config
+# by removing the two lines that disabled it under appearance.disabled.settings.
+# This should be applied when stacks/install-octoprint.sh absorbs the octoprint
+# install logic from the sibling repo.
+#
+# Note: the sibling repo also restructured scripts/ (renamed generate_*.sh →
+# build-*.sh, added smoke-checks.sh, flash.sh). Those changes are larger and
+# should be evaluated separately during the full consolidation.
+
+diff --git a/scripts/install-octoprint.sh b/scripts/install-octoprint.sh
+index bf57adf..8317719 100755
+--- a/scripts/install-octoprint.sh
++++ b/scripts/install-octoprint.sh
+@@ -158,8 +158,6 @@ appearance:
+     disabled:
+       tab:
+         - timelapse
+-      settings:
+-        - webcam
+ YAML
+ fi
