@@ -86,6 +86,26 @@ echo
 raw_tmp="$(mktemp -d)"
 trap 'rm -rf "$raw_tmp"' EXIT
 
+echo "=== Decompressing boot & $OS_CHOICE rootfs ==="
+gunzip -c "$BOOT_GZ"   > "${raw_tmp}/boot.raw"
+gunzip -c "$ROOTFS_GZ" > "${raw_tmp}/rootfs.raw"
+
+if command -v adb >/dev/null 2>&1 && adb devices 2>/dev/null | grep -q "2c2d59162055f8d2"; then
+    echo "=== Rebooting device from ADB to Fastboot (lk2nd) ==="
+    adb -s 2c2d59162055f8d2 reboot bootloader || true
+    for _i in {1..16}; do
+        if command -v fastboot >/dev/null 2>&1 && fastboot devices 2>/dev/null | grep -q "fastboot"; then
+            break
+        fi
+        sleep 0.5
+    done
+fi
+if command -v fastboot >/dev/null 2>&1 && fastboot devices 2>/dev/null | grep -q "fastboot"; then
+    echo "=== Switching lk2nd Fastboot to Qualcomm EDL 9008 ==="
+    fastboot oem edl 2>/dev/null || fastboot reboot-emergency 2>/dev/null || true
+    sleep 2
+fi
+
 if [[ "$FULL_MODE" == true ]]; then
     GPT_BIN="$FILES_DIR/gpt_both0.bin"
     FW_ZIP="$FILES_DIR/firmware.zip"
@@ -116,10 +136,6 @@ if [[ "$FULL_MODE" == true ]]; then
         fi
     done
 fi
-
-echo "=== Decompressing boot & $OS_CHOICE rootfs ==="
-gunzip -c "$BOOT_GZ"   > "${raw_tmp}/boot.raw"
-gunzip -c "$ROOTFS_GZ" > "${raw_tmp}/rootfs.raw"
 
 echo "=== Flashing boot ==="
 edl w boot "${raw_tmp}/boot.raw"
