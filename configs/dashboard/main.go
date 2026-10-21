@@ -534,7 +534,7 @@ func getCPUInfo() map[string]any {
 
 func getDHCPLeases() []map[string]string {
 	var leases []map[string]string
-	paths := []string{"/run/dnsmasq-usb0.leases", "/tmp/dhcp.leases", "/var/lib/misc/dnsmasq.leases"}
+	paths := []string{"/run/dnsmasq-wlan0.leases", "/run/dnsmasq-usb0.leases", "/tmp/dhcp.leases", "/var/lib/misc/dnsmasq.leases"}
 	nmLeases, _ := filepath.Glob("/var/lib/NetworkManager/dnsmasq-*.leases")
 	paths = append(paths, nmLeases...)
 	seen := map[string]bool{}
@@ -1250,6 +1250,81 @@ func handleVouchers(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": true, "vouchers": appStore.Vouchers})
 }
 
+func startHotspotAP(cfg HotspotConfig) (string, error) {
+	if cfg.Channel <= 0 {
+		cfg.Channel = 6
+	}
+	_, _ = runCmd(3*time.Second, "nmcli", "connection", "delete", "Hotspot")
+	addArgs := []string{
+		"connection", "add", "type", "wifi", "ifname", "wlan0", "con-name", "Hotspot",
+		"autoconnect", "no", "ssid", cfg.SSID,
+		"802-11-wireless.mode", "ap",
+		"802-11-wireless.band", "bg",
+		"802-11-wireless.channel", strconv.Itoa(cfg.Channel),
+		"ipv4.method", "manual",
+		"ipv4.addresses", "192.168.43.1/24",
+	}
+	if len(cfg.Password) >= 8 {
+		addArgs = append(addArgs,
+			"wifi-sec.key-mgmt", "wpa-psk",
+			"wifi-sec.proto", "rsn",
+			"wifi-sec.pairwise", "ccmp",
+			"wifi-sec.group", "ccmp",
+			"wifi-sec.psk", cfg.Password,
+		)
+	}
+	if out, err := runCmd(8*time.Second, "nmcli", addArgs...); err != nil {
+		return out, err
+	}
+	out, err := runCmd(15*time.Second, "nmcli", "connection", "up", "Hotspot")
+	if err != nil {
+		return out, err
+	}
+
+	// Start dedicated DHCP server on wlan0 (192.168.43.10 - 192.168.43.250)
+	if pidStr := readFileTrim("/run/dnsmasq-wlan0.pid"); pidStr != "" {
+		_, _ = runCmd(2*time.Second, "kill", pidStr)
+	}
+	_, _ = runCmd(3*time.Second, "/usr/sbin/dnsmasq",
+		"--user=root",
+		"--interface=wlan0",
+		"--bind-interfaces",
+		"--except-interface=lo",
+		"--dhcp-range=192.168.43.10,192.168.43.250,255.255.255.0,12h",
+		"--dhcp-option=3,192.168.43.1",
+		"--dhcp-option=6,1.1.1.1,8.8.8.8",
+		"--dhcp-leasefile=/run/dnsmasq-wlan0.leases",
+		"--pid-file=/run/dnsmasq-wlan0.pid",
+	)
+
+	// Enable IPv4 forwarding, NAT masquerading on wwan0, and ensure 4G default route is active
+	_ = os.WriteFile("/proc/sys/net/ipv4/ip_forward", []byte("1"), 0644)
+	_, _ = runCmd(3*time.Second, "iptables", "-t", "nat", "-A", "POSTROUTING", "-o", "wwan0", "-j", "MASQUERADE")
+	_, _ = runCmd(3*time.Second, "nft", "add", "table", "ip", "uz801_nat")
+	_, _ = runCmd(3*time.Second, "nft", "add", "chain", "ip", "uz801_nat", "postrouting", "{ type nat hook postrouting priority 100 ; }")
+	_, _ = runCmd(3*time.Second, "nft", "add", "rule", "ip", "uz801_nat", "postrouting", "oifname", "wwan0", "masquerade")
+
+	m := getModemStatus()
+	if gw, _ := m["bearer_gw"].(string); gw != "" {
+		_, _ = runCmd(3*time.Second, "ip", "route", "replace", "default", "via", gw, "dev", "wwan0", "metric", "50")
+	}
+	return out, nil
+}
+
+func stopHotspotAP() (string, error) {
+	if pidStr := readFileTrim("/run/dnsmasq-wlan0.pid"); pidStr != "" {
+		_, _ = runCmd(2*time.Second, "kill", pidStr)
+	}
+	_ = os.Remove("/run/dnsmasq-wlan0.pid")
+	_, _ = runCmd(8*time.Second, "nmcli", "connection", "down", "Hotspot")
+	_, _ = runCmd(3*time.Second, "nmcli", "connection", "delete", "Hotspot")
+	out, err := runCmd(15*time.Second, "nmcli", "connection", "up", "wlan")
+	if err != nil {
+		out, err = runCmd(15*time.Second, "nmcli", "device", "connect", "wlan0")
+	}
+	return out, err
+}
+
 func handleHotspotConfig(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		storeMu.Lock()
@@ -1285,12 +1360,9 @@ func handleHotspotConfig(w http.ResponseWriter, r *http.Request) {
 	var out string
 	var err error
 	if cfg.Active {
-		_ = os.WriteFile("/proc/sys/net/ipv4/ip_forward", []byte("1"), 0644)
-		_, _ = runCmd(3*time.Second, "iptables", "-t", "nat", "-A", "POSTROUTING", "-o", "wwan0", "-j", "MASQUERADE")
-		out, err = runCmd(20*time.Second, "nmcli", "dev", "wifi", "hotspot", "ifname", "wlan0", "ssid", cfg.SSID, "password", cfg.Password)
+		out, err = startHotspotAP(cfg)
 	} else {
-		out, err = runCmd(10*time.Second, "nmcli", "connection", "down", "Hotspot")
-		_, _ = runCmd(10*time.Second, "nmcli", "connection", "up", "wlan")
+		out, err = stopHotspotAP()
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"ok": err == nil, "output": out, "hotspot": cfg})
 }
@@ -1743,11 +1815,10 @@ func handleWiFiConnect(w http.ResponseWriter, r *http.Request) {
 		appStore.HotspotConfig.SSID = req.SSID
 		appStore.HotspotConfig.Password = req.Password
 		appStore.HotspotConfig.Active = true
+		cfg := appStore.HotspotConfig
 		saveStoreLocked()
 		storeMu.Unlock()
-		_ = os.WriteFile("/proc/sys/net/ipv4/ip_forward", []byte("1"), 0644)
-		_, _ = runCmd(3*time.Second, "iptables", "-t", "nat", "-A", "POSTROUTING", "-o", "wwan0", "-j", "MASQUERADE")
-		out, err := runCmd(20*time.Second, "nmcli", "dev", "wifi", "hotspot", "ifname", "wlan0", "ssid", req.SSID, "password", req.Password)
+		out, err := startHotspotAP(cfg)
 		writeJSON(w, http.StatusOK, map[string]any{"ok": err == nil, "output": out})
 		return
 	}
