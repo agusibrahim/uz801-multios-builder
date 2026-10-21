@@ -1,5 +1,5 @@
-.PHONY: help build-alpine build-void build-arch build-dietpi build-immortalwrt build-ubuntu build-chimera build-pmos \
-        flash-alpine flash-void flash-arch flash-dietpi flash-immortalwrt flash-ubuntu flash-chimera flash-pmos flash-full
+.PHONY: help build-alpine build-void build-arch build-dietpi build-immortalwrt build-ubuntu build-chimera build-pmos build-kali \
+        flash-alpine flash-void flash-arch flash-dietpi flash-immortalwrt flash-ubuntu flash-chimera flash-pmos flash-kali flash-full
 
 help:
 	@echo "=== UZ801 v3.0 (MSM8916) Multi-OS Builder & Flasher (macOS Docker/OrbStack) ==="
@@ -13,6 +13,7 @@ help:
 	@echo "  make build-ubuntu      - Build Ubuntu 24.04.5 LTS (systemd + glibc)"
 	@echo "  make build-chimera     - Build Chimera Linux (dinit + FreeBSD Userland + LLVM)"
 	@echo "  make build-pmos        - Build postmarketOS v25.06 (OpenRC + musl Mobile Linux)"
+	@echo "  make build-kali        - Build Kali Linux Rolling (systemd + Pentest Drop-Box)"
 	@echo ""
 	@echo "Flash Targets (via EDL 9008):"
 	@echo "  make flash-alpine      - Flash Alpine Linux rootfs + boot"
@@ -23,7 +24,8 @@ help:
 	@echo "  make flash-ubuntu      - Flash Ubuntu 24.04.5 LTS rootfs + boot"
 	@echo "  make flash-chimera     - Flash Chimera Linux rootfs + boot"
 	@echo "  make flash-pmos        - Flash postmarketOS v25.06 rootfs + boot"
-	@echo "  make flash-full OS=alpine|void|arch|dietpi|immortalwrt|ubuntu|chimera|pmos - Full flash"
+	@echo "  make flash-kali        - Flash Kali Linux Rolling rootfs + boot"
+	@echo "  make flash-full OS=alpine|void|arch|dietpi|immortalwrt|ubuntu|chimera|pmos|kali - Full flash"
 
 build-alpine:
 	docker run --rm --privileged --platform linux/arm64 \
@@ -123,6 +125,15 @@ build-pmos:
 	    cd /host && ./scripts/build-pmos.sh ./files \
 	  '
 
+build-kali:
+	docker run --rm --privileged --platform linux/arm64 \
+	  -v "$$PWD:/host" \
+	  ubuntu:22.04 bash -ec '\
+	    export DEBIAN_FRONTEND=noninteractive && \
+	    apt-get update -qq && apt-get install -y -qq wget e2fsprogs ca-certificates >/dev/null && \
+	    cd /host && ./scripts/build-kali.sh ./files \
+	  '
+
 flash-alpine:
 	./flash.sh alpine
 
@@ -146,6 +157,9 @@ flash-chimera:
 
 flash-pmos:
 	./flash.sh pmos
+
+flash-kali:
+	./flash.sh kali
 
 flash-full:
 	./flash.sh -f $(OS)
