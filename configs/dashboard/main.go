@@ -42,8 +42,9 @@ var (
 	storePath = "/etc/uz801-hotspot-store.json"
 	appStore  = &HotspotStore{
 		HotspotConfig: HotspotConfig{
+			Active:        true,
 			SSID:          "UZ801-4G-Hotspot",
-			Password:      "12345678",
+			Password:      "",
 			Band:          "bg",
 			Channel:       6,
 			CaptivePortal: true,
@@ -1415,10 +1416,14 @@ func startHotspotAP(cfg HotspotConfig) (string, error) {
 	if cfg.Channel <= 0 {
 		cfg.Channel = 6
 	}
+	// Disconnect any client WiFi profile on wlan0 first so AP mode can bind cleanly
+	_, _ = runCmd(3*time.Second, "nmcli", "connection", "down", "wlan")
+	_, _ = runCmd(3*time.Second, "nmcli", "connection", "down", "Kaylaa")
+	_, _ = runCmd(3*time.Second, "nmcli", "connection", "modify", "wlan", "connection.autoconnect", "no")
 	_, _ = runCmd(3*time.Second, "nmcli", "connection", "delete", "Hotspot")
 	addArgs := []string{
 		"connection", "add", "type", "wifi", "ifname", "wlan0", "con-name", "Hotspot",
-		"autoconnect", "no", "ssid", cfg.SSID,
+		"autoconnect", "yes", "ssid", cfg.SSID,
 		"802-11-wireless.mode", "ap",
 		"802-11-wireless.band", "bg",
 		"802-11-wireless.channel", strconv.Itoa(cfg.Channel),
@@ -1485,6 +1490,7 @@ func stopHotspotAP() (string, error) {
 	_ = os.Remove("/run/dnsmasq-wlan0.pid")
 	_, _ = runCmd(8*time.Second, "nmcli", "connection", "down", "Hotspot")
 	_, _ = runCmd(3*time.Second, "nmcli", "connection", "delete", "Hotspot")
+	_, _ = runCmd(3*time.Second, "nmcli", "connection", "modify", "wlan", "connection.autoconnect", "yes")
 	out, err := runCmd(15*time.Second, "nmcli", "connection", "up", "wlan")
 	if err != nil {
 		out, err = runCmd(15*time.Second, "nmcli", "device", "connect", "wlan0")
@@ -1533,11 +1539,48 @@ func handleHotspotConfig(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"ok": err == nil, "output": out, "hotspot": cfg})
 }
 
-// Background Voucher & Client Quota / Expiry Enforcer (runs every 10 seconds)
+// Background Voucher & Client Quota / Expiry Enforcer + Hotspot Auto-Start Watchdog
 func startVoucherEnforcer() {
+	// Ensure Hotspot AP starts automatically on boot if HotspotConfig.Active == true
+	go func() {
+		for i := 0; i < 15; i++ {
+			time.Sleep(3 * time.Second)
+			storeMu.Lock()
+			cfg := appStore.HotspotConfig
+			storeMu.Unlock()
+			if !cfg.Active {
+				return
+			}
+			if _, err := os.Stat("/sys/class/net/wlan0"); err == nil {
+				ipOut, _ := runCmd(2*time.Second, "ip", "addr", "show", "dev", "wlan0")
+				if !strings.Contains(ipOut, "192.168.43.1") {
+					log.Printf("[+] Auto-starting Hotspot AP (%s) on boot...", cfg.SSID)
+					_, _ = startHotspotAP(cfg)
+				} else {
+					// Ensure wlan0 dnsmasq and captive firewall are running
+					if pidStr := readFileTrim("/run/dnsmasq-wlan0.pid"); pidStr == "" {
+						_, _ = startHotspotAP(cfg)
+					} else {
+						syncCaptiveFirewall()
+					}
+					return
+				}
+			}
+		}
+	}()
+
 	go func() {
 		for {
 			time.Sleep(10 * time.Second)
+			storeMu.Lock()
+			hsCfg := appStore.HotspotConfig
+			storeMu.Unlock()
+			if hsCfg.Active {
+				ipOut, _ := runCmd(2*time.Second, "ip", "addr", "show", "dev", "wlan0")
+				if !strings.Contains(ipOut, "192.168.43.1") {
+					_, _ = startHotspotAP(hsCfg)
+				}
+			}
 			clients := discoverConnectedClients()
 			clientBytesByMAC := map[string]uint64{}
 			for _, c := range clients {

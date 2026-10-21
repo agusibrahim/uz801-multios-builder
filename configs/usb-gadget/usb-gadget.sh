@@ -81,7 +81,7 @@ setup_gadget() {
                 --dhcp-option=3 --dhcp-leasefile=/run/dnsmasq-usb0.leases \
                 --pid-file=/run/dnsmasq-usb0.pid 2>/dev/null || true
         fi
-        if [ -x /usr/bin/uz801-dashboard ] && ! pgrep -x uz801-dashboard >/dev/null 2>&1; then
+        if [ -x /usr/bin/uz801-dashboard ] && ! grep -q 'ID="goos"' /etc/os-release 2>/dev/null && ! pgrep -x uz801-dashboard >/dev/null 2>&1; then
             (nohup /usr/bin/uz801-dashboard >/run/uz801-dashboard.log 2>&1 </dev/null &)
         fi
         fi
@@ -207,7 +207,7 @@ setup_gadget() {
             --pid-file=/run/dnsmasq-usb0.pid 2>/dev/null || true
     fi
 
-    if [ -x /usr/bin/uz801-dashboard ] && ! pgrep -x uz801-dashboard >/dev/null 2>&1; then
+    if [ -x /usr/bin/uz801-dashboard ] && ! grep -q 'ID="goos"' /etc/os-release 2>/dev/null && ! pgrep -x uz801-dashboard >/dev/null 2>&1; then
         (nohup /usr/bin/uz801-dashboard >/run/uz801-dashboard.log 2>&1 </dev/null &)
     fi
 
