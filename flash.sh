@@ -39,7 +39,8 @@ if [[ -z "$OS_CHOICE" ]]; then
     echo "  [5] ImmortalWrt 24.10.6  (procd + LuCI Web UI)"
     echo "  [6] Ubuntu 24.04.5 LTS   (systemd + glibc)"
     echo "  [7] Chimera Linux        (dinit + FreeBSD Userland + LLVM)"
-    read -rp "Pilihan [1-7] (Default: 1): " num
+    echo "  [8] postmarketOS v25.06  (OpenRC + musl Mobile Linux)"
+    read -rp "Pilihan [1-8] (Default: 1): " num
     case "${num:-1}" in
         1) OS_CHOICE="alpine" ;;
         2) OS_CHOICE="void" ;;
@@ -48,6 +49,7 @@ if [[ -z "$OS_CHOICE" ]]; then
         5) OS_CHOICE="immortalwrt" ;;
         6) OS_CHOICE="ubuntu" ;;
         7) OS_CHOICE="chimera" ;;
+        8) OS_CHOICE="pmos" ;;
         *) echo "[-] Pilihan tidak valid"; exit 1 ;;
     esac
 fi
@@ -60,8 +62,9 @@ case "$OS_CHOICE" in
     immortalwrt) ROOTFS_GZ="$FILES_DIR/immortalwrt-rootfs.img.gz" ;;
     ubuntu)      ROOTFS_GZ="$FILES_DIR/ubuntu-rootfs.img.gz" ;;
     chimera)     ROOTFS_GZ="$FILES_DIR/chimera-rootfs.img.gz" ;;
+    pmos|postmarketos) ROOTFS_GZ="$FILES_DIR/pmos-rootfs.img.gz" ;;
     *)
-        echo "[-] Unknown OS: $OS_CHOICE (choose: alpine, void, arch, dietpi, immortalwrt, ubuntu, chimera)"
+        echo "[-] Unknown OS: $OS_CHOICE (choose: alpine, void, arch, dietpi, immortalwrt, ubuntu, chimera, pmos)"
         exit 1
         ;;
 esac

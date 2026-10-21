@@ -2,7 +2,7 @@
 
 # OpenStick UZ801 v3.0 (MSM8916) — Multi-OS Linux Builder & EDL Flasher
 
-Builder dan flasher mandiri untuk menjalankan **7 distribusi Linux Mainline 64-bit (`aarch64`, Kernel `6.12.1-msm8916`)** pada modem USB 4G LTE **Yiming UZ801 v3.0 (Qualcomm Snapdragon 410 / MSM8916)** langsung dari **macOS (Apple Silicon via Docker/OrbStack)** maupun Linux.
+Builder dan flasher mandiri untuk menjalankan **8 distribusi Linux Mainline 64-bit (`aarch64`, Kernel `6.12.1-msm8916`)** pada modem USB 4G LTE **Yiming UZ801 v3.0 (Qualcomm Snapdragon 410 / MSM8916)** langsung dari **macOS (Apple Silicon via Docker/OrbStack)** maupun Linux.
 
 Seluruh image OS yang dihasilkan sudah terkonfigurasi otomatis (*out-of-the-box*) dengan:
 - **ADB Over USB (`adbd` FunctionFS)** — langsung terdeteksi di `adb devices` dan bisa `adb shell` (akses `root` instan tanpa jaringan).
@@ -30,6 +30,7 @@ Keempat image OS berikut sudah di-build, diuji langsung di hardware UZ801 v3.0, 
 | **5** | **ImmortalWrt 24.10.6** | `immortalwrt-rootfs.img.gz` (`50 MB`) | `procd` | `musl` | `opkg` + `LuCI Web UI` | **~60 MB** | Router OS modern dengan dashboard web **LuCI Argon** (`http://192.168.42.1`) |
 | **6** | **Ubuntu 24.04.5 LTS** | `ubuntu-rootfs.img.gz` (`106 MB`) | `systemd` | `glibc` (+ `musl`) | `apt` (`Ubuntu Ports`) | **~77 MB** | Ubuntu Noble Numbat 24.04.5 LTS resmi bebas bloat (`ubuntu-base` tuned) |
 | **7** | **Chimera Linux** | `chimera-rootfs.img.gz` (`81 MB`) | `dinit` | `musl` (FreeBSD + LLVM) | `apk` (v3) | **~86 MB** | Distro modern non-GNU dengan userland **FreeBSD**, compiler **LLVM/Clang**, dan init **`dinit`** |
+| **8** | **postmarketOS v25.06** | `pmos-rootfs.img.gz` (`99 MB`) | `OpenRC` | `musl` | `apk` (pmOS + Alpine) | **~52 MB** | Distro mobile Linux asli untuk Qualcomm MSM8916 (`postmarketos-base` console) |
 
 ---
 
@@ -107,6 +108,7 @@ Gunakan mode ini jika dongle sudah pernah di-flash dengan skema partisi project 
 ./flash.sh immortalwrt   # Flash ImmortalWrt 24.10.6
 ./flash.sh ubuntu        # Flash Ubuntu 24.04.5 LTS
 ./flash.sh chimera       # Flash Chimera Linux
+./flash.sh pmos          # Flash postmarketOS v25.06
 ```
 
 #### B. Mode Full (Flash GPT + Bootloader + Radio EFS + `boot` + `rootfs`)
@@ -198,4 +200,5 @@ make build-dietpi        # Menghasilkan files/dietpi-rootfs.img.gz
 make build-immortalwrt   # Menghasilkan files/immortalwrt-rootfs.img.gz
 make build-ubuntu        # Menghasilkan files/ubuntu-rootfs.img.gz
 make build-chimera       # Menghasilkan files/chimera-rootfs.img.gz
+make build-pmos          # Menghasilkan files/pmos-rootfs.img.gz
 ```
