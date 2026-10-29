@@ -286,6 +286,11 @@ start_service() {
                             echo on > /sys/devices/platform/soc@0/4080000.remoteproc/4080000.remoteproc:bam-dmux/power/control 2>/dev/null || true
                             ip addr replace "${BIP}/${BPFX:-30}" dev wwan0 2>/dev/null || true
                             [ -n "$BGW" ] && [ "$BGW" != "--" ] && ip route replace default via "$BGW" dev wwan0 metric 10 2>/dev/null || true
+                            rm -f /etc/resolv.conf
+                            printf "nameserver 1.1.1.1\nnameserver 8.8.8.8\n" > /etc/resolv.conf
+                            printf "nameserver 1.1.1.1\nnameserver 8.8.8.8\n" > /tmp/resolv.conf
+                            HTTP_DATE=$(curl -sI --max-time 4 http://1.1.1.1 2>/dev/null | sed -n "s/^[Dd]ate: //p" | tr -d "\r")
+                            [ -n "$HTTP_DATE" ] && date -u -s "$HTTP_DATE" >/dev/null 2>&1 || true
                             break
                         fi
                     done
