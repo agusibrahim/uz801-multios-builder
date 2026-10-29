@@ -282,6 +282,8 @@ start_service() {
                         BGW=$(echo "$BINFO" | awk -F': ' '/bearer\.ipv4-config\.gateway/{print $2}')
                         if [ -n "$BIP" ] && [ "$BIP" != "--" ]; then
                             ip link set wwan0 up 2>/dev/null || true
+                            echo -1 > /sys/devices/platform/soc@0/4080000.remoteproc/4080000.remoteproc:bam-dmux/power/autosuspend_delay_ms 2>/dev/null || true
+                            echo on > /sys/devices/platform/soc@0/4080000.remoteproc/4080000.remoteproc:bam-dmux/power/control 2>/dev/null || true
                             ip addr replace "${BIP}/${BPFX:-30}" dev wwan0 2>/dev/null || true
                             [ -n "$BGW" ] && [ "$BGW" != "--" ] && ip route replace default via "$BGW" dev wwan0 metric 10 2>/dev/null || true
                             break
