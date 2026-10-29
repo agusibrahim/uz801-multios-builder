@@ -154,7 +154,33 @@ network={
 EOF
         chmod 0600 "$wpa_tmp"
         e2cp -G 0 -O 0 -P 600 "$wpa_tmp" "${raw_tmp}/rootfs.raw:/etc/wpa_supplicant/wpa_supplicant.conf" 2>/dev/null || true
-        echo "[+] Berhasil menyuntikkan WiFi '$CUSTOM_WIFI_SSID' via e2tools!"
+
+        # Khusus OpenWrt / ImmortalWrt: Suntikkan juga ke sistem UCI (/etc/config/wireless)
+        openwrt_wireless="${raw_tmp}/wireless.uci"
+        enc_type="psk2"
+        [[ -z "$CUSTOM_WIFI_PASS" ]] && enc_type="none"
+        cat > "$openwrt_wireless" << EOF
+config wifi-device 'radio0'
+	option type 'mac80211'
+	option path 'platform/soc@0/a204000.remoteproc/remoteproc/remoteproc0/remoteproc0:smd-edge/remoteproc0:smd-edge.WCNSS_CTRL.-1.-1/a204000.remoteproc:smd-edge:wcnss:wifi'
+	option band '2g'
+	option channel '1'
+	option htmode 'HT20'
+	option country 'ID'
+	option disabled '0'
+
+config wifi-iface 'default_radio0'
+	option device 'radio0'
+	option network 'wwan'
+	option mode 'sta'
+	option ssid '${CUSTOM_WIFI_SSID}'
+	option encryption '${enc_type}'
+	option key '${CUSTOM_WIFI_PASS}'
+EOF
+        chmod 0644 "$openwrt_wireless"
+        e2cp -G 0 -O 0 -P 644 "$openwrt_wireless" "${raw_tmp}/rootfs.raw:/etc/config/wireless" 2>/dev/null || true
+
+        echo "[+] Berhasil menyuntikkan WiFi '$CUSTOM_WIFI_SSID' via e2tools (NetworkManager, wpa_supplicant & OpenWrt UCI)!"
     else
         echo "[!] Tool e2cp tidak ditemukan, instal via 'brew install e2tools' untuk fitur penyuntikan WiFi langsung."
     fi
