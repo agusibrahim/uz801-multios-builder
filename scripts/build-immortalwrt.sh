@@ -8,7 +8,7 @@ OUT_DIR="${1:-"$WORKDIR/files"}"
 STAGING="$(mktemp -d)"
 CHROOT="$STAGING/rootfs"
 
-HOST_NAME="${HOST_NAME:-ImmortalWrt-UZ801}"
+HOST_NAME="ImmortalWrt"
 PASSWORD="${PASSWORD:-changeme}"
 WIFI_SSID="${WIFI_SSID:-Kaylaa}"
 WIFI_PASS="${WIFI_PASS:-agus00000}"
@@ -32,15 +32,20 @@ mkdir -p "$CHROOT/var/lock" "$CHROOT/tmp"
 rm -f "$CHROOT/etc/resolv.conf"
 cp /etc/resolv.conf "$CHROOT/etc/resolv.conf"
 
-# Remove kmods feed for 6.6 kernel since we use mainline 6.12.1-msm8916 kernel
+# Remove kmods feed for 6.6 kernel since we use mainline 6.12.1-msm8916 kernel, and disable signature check
 sed -i '/immortalwrt_kmods/d' "$CHROOT/etc/opkg/distfeeds.conf"
+sed -i 's/^option check_signature/# option check_signature/' "$CHROOT/etc/opkg.conf" 2>/dev/null || true
 
-echo "[*] Installing packages via opkg (ModemManager, LuCI Argon, WiFi, kmod, tools)..."
+echo "[*] Installing packages via opkg (ModemManager, LuCI Argon, L2TP VPN, WiFi, kmod, tools)..."
 chroot "$CHROOT" /bin/sh -e -c "
 opkg update
 opkg install --force-depends \
     modemmanager \
     luci-proto-modemmanager \
+    luci-proto-ppp \
+    xl2tpd \
+    ppp-mod-pppol2tp \
+    resolveip \
     libqmi \
     wpad-basic-mbedtls \
     iw \
@@ -58,6 +63,9 @@ opkg install --force-depends \
     luci-theme-argon
 rm -rf /tmp/opkg-lists/* /var/opkg-lists/*
 "
+
+# Fix relative path in /lib/netifd/proto/l2tp.sh so netifd & LuCI register L2TP protocol properly
+sed -i 's|\.\./netifd-proto\.sh|/lib/netifd/netifd-proto.sh|g' "$CHROOT/lib/netifd/proto/l2tp.sh" 2>/dev/null || true
 
 # Restore OpenWrt resolv.conf symlink
 ln -sf /tmp/resolv.conf "$CHROOT/etc/resolv.conf"
@@ -135,6 +143,13 @@ config timeserver 'ntp'
 	list server 'time.cloudflare.com'
 EOF
 
+cat > "$CHROOT/etc/config/dropbear" << 'EOF'
+config dropbear
+	option PasswordAuth 'on'
+	option RootPasswordAuth 'on'
+	option Port '22'
+EOF
+
 cat > "$CHROOT/etc/config/network" << 'EOF'
 config interface 'loopback'
 	option device 'lo'
@@ -153,24 +168,16 @@ config interface 'lan'
 	option ip6assign '60'
 
 config interface 'wwan'
-	option device 'wlan0'
 	option proto 'dhcp'
 	option peerdns '1'
 	option metric '20'
-
-config interface 'modem'
-	option device '/sys/devices/platform/soc@0/4080000.remoteproc/4080000.remoteproc:bam-dmux'
-	option proto 'modemmanager'
-	option apn 'byu'
-	option auth 'none'
-	option iptype 'ipv4'
-	option metric '10'
 EOF
 
 rm -f "$CHROOT/etc/config/wireless"
 
-# Add wwan, modem, and wwan0 to firewall wan zone so NAT masquerading works out of the box
-sed -i "s/list network 'wan6'/list network 'wan6'\n\tlist network 'wwan'\n\tlist network 'modem'\n\tlist device 'wwan0'/" "$CHROOT/etc/config/firewall"
+# Allow incoming SSH/HTTP on wan zone & add wwan/wwan0 to wan zone
+sed -i "s/list network 'wan6'/list network 'wan6'\n\tlist network 'wwan'\n\tlist device 'wwan0'/" "$CHROOT/etc/config/firewall"
+sed -i "s/option input\t\tREJECT/option input\t\tACCEPT/" "$CHROOT/etc/config/firewall"
 
 # Configure serial console on ttyMSM0 in /etc/inittab
 grep -q "ttyMSM0" "$CHROOT/etc/inittab" || echo "ttyMSM0::askfirst:/usr/libexec/login.sh" >> "$CHROOT/etc/inittab"
@@ -256,9 +263,18 @@ start_service() {
                 mmcli -m 0 --set-power-state-on >/dev/null 2>&1 || true
                 mmcli -m 0 -e >/dev/null 2>&1 || true
                 if ! ip addr show wwan0 2>/dev/null | grep -q "inet "; then
-                    mmcli -m 0 --simple-connect="apn=byu,ip-type=ipv4" >/dev/null 2>&1 || true
-                    BEARER=$(mmcli -m 0 -K 2>/dev/null | awk -F': ' '/modem\.generic\.bearers\.value\[1\]/{print $2}')
-                    if [ -n "$BEARER" ]; then
+                    OP_CODE=$(mmcli -i 0 -K 2>/dev/null | awk -F': ' '/sim\.properties\.operator-code/{print $2}')
+                    APN_VAL="internet"
+                    case "$OP_CODE" in
+                        51089) APN_VAL="3gprs" ;;
+                        51010) APN_VAL="byu" ;;
+                        51001|51021) APN_VAL="indosatgprs" ;;
+                        51011|51008) APN_VAL="axis" ;;
+                    esac
+                    mmcli -m 0 --simple-connect="apn=${APN_VAL},ip-type=ipv4" >/dev/null 2>&1 || true
+                    for b_idx in 1 2 3 4 5; do
+                        BEARER=$(mmcli -m 0 -K 2>/dev/null | awk -F': ' "/modem\.generic\.bearers\.value\[${b_idx}\]/{print \$2}")
+                        [ -n "$BEARER" ] || continue
                         BINFO=$(mmcli -b "$BEARER" -K 2>/dev/null)
                         BIP=$(echo "$BINFO" | awk -F': ' '/bearer\.ipv4-config\.address/{print $2}')
                         BPFX=$(echo "$BINFO" | awk -F': ' '/bearer\.ipv4-config\.prefix/{print $2}')
@@ -267,8 +283,9 @@ start_service() {
                             ip link set wwan0 up 2>/dev/null || true
                             ip addr replace "${BIP}/${BPFX:-30}" dev wwan0 2>/dev/null || true
                             [ -n "$BGW" ] && [ "$BGW" != "--" ] && ip route replace default via "$BGW" dev wwan0 metric 10 2>/dev/null || true
+                            break
                         fi
-                    fi
+                    done
                 else
                     break
                 fi
@@ -280,6 +297,8 @@ start_service() {
 EOF
 # Disable default OpenWrt dnsmasq & firewall4 nftables rules that conflict with usb-gadget dnsmasq & LuCI on wwan
 rm -f "$CHROOT/etc/rc.d/S19dnsmasq" "$CHROOT/etc/rc.d/S19firewall"
+ln -sf ../init.d/dropbear "$CHROOT/etc/rc.d/S19dropbear" 2>/dev/null || true
+ln -sf ../init.d/uhttpd "$CHROOT/etc/rc.d/S50uhttpd" 2>/dev/null || true
 chmod 0755 "$CHROOT/etc/init.d/uz801-init"
 ln -sf ../init.d/uz801-init "$CHROOT/etc/rc.d/S12uz801-init"
 
