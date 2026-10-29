@@ -67,8 +67,48 @@ generate_mac_address() {
     echo "${b1}:${b2}:${b3}:${b4}:${b5}:${b6}"
 }
 
+sync_modem_firmware() {
+    # Ensure /lib/firmware/modem.* matches this specific dongle's /dev/mmcblk0p3 factory modem partition
+    [ -b /dev/mmcblk0p3 ] || return 0
+    local mnt_dir="/tmp/uz801_modem_part"
+    mkdir -p "$mnt_dir"
+    if mount -o ro /dev/mmcblk0p3 "$mnt_dir" 2>/dev/null; then
+        local img_dir=""
+        [ -d "$mnt_dir/image" ] && img_dir="$mnt_dir/image"
+        [ -d "$mnt_dir/IMAGE" ] && img_dir="$mnt_dir/IMAGE"
+        if [ -n "$img_dir" ]; then
+            local src_mdt="$img_dir/modem.mdt"
+            [ -f "$img_dir/MODEM.MDT" ] && src_mdt="$img_dir/MODEM.MDT"
+            if [ -f "$src_mdt" ]; then
+                local src_md5="$(md5sum "$src_mdt" 2>/dev/null | cut -d' ' -f1)"
+                local dst_md5="$(md5sum /lib/firmware/modem.mdt 2>/dev/null | cut -d' ' -f1)"
+                if [ -n "$src_md5" ] && [ "$src_md5" != "$dst_md5" ]; then
+                    log "Syncing device-specific factory modem firmware ($src_md5) from /dev/mmcblk0p3 to /lib/firmware..."
+                    rm -f /lib/firmware/modem.* /lib/firmware/mba.mbn 2>/dev/null || true
+                    for f in "$img_dir"/modem.* "$img_dir"/MODEM.* "$img_dir"/mba.* "$img_dir"/MBA.*; do
+                        [ -f "$f" ] || continue
+                        local lc="$(basename "$f" | tr '[:upper:]' '[:lower:]')"
+                        cp -af "$f" "/lib/firmware/$lc" 2>/dev/null || true
+                    done
+                    ln -sf modem.mdt /lib/firmware/modem.mbn 2>/dev/null || true
+                    sync
+                    for r in /sys/class/remoteproc/remoteproc*; do
+                        if grep -q "4080000" "$r/name" 2>/dev/null; then
+                            echo stop > "$r/state" 2>/dev/null || true
+                            sleep 1
+                            echo start > "$r/state" 2>/dev/null || true
+                        fi
+                    done
+                fi
+            fi
+        fi
+        umount "$mnt_dir" 2>/dev/null || true
+    fi
+}
+
 setup_gadget() {
     load_config
+    sync_modem_firmware &
     
     # If already active and bound to UDC, just ensure usb0, dnsmasq, and dropbear are up
     if [ -d "${GADGET_PATH}" ] && [ -s "${GADGET_PATH}/UDC" ]; then

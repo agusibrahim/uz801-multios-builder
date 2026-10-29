@@ -180,6 +180,16 @@ EOF
         chmod 0644 "$openwrt_wireless"
         e2cp -G 0 -O 0 -P 644 "$openwrt_wireless" "${raw_tmp}/rootfs.raw:/etc/config/wireless" 2>/dev/null || true
 
+        # Pastikan Dropbear SSH di OpenWrt mendengarkan di SEMUA interface (USB + WiFi)
+        openwrt_dropbear="${raw_tmp}/dropbear.uci"
+        cat > "$openwrt_dropbear" << 'EOF'
+config dropbear
+	option PasswordAuth 'on'
+	option RootPasswordAuth 'on'
+	option Port '22'
+EOF
+        e2cp -G 0 -O 0 -P 644 "$openwrt_dropbear" "${raw_tmp}/rootfs.raw:/etc/config/dropbear" 2>/dev/null || true
+
         echo "[+] Berhasil menyuntikkan WiFi '$CUSTOM_WIFI_SSID' via e2tools (NetworkManager, wpa_supplicant & OpenWrt UCI)!"
     else
         echo "[!] Tool e2cp tidak ditemukan, instal via 'brew install e2tools' untuk fitur penyuntikan WiFi langsung."
@@ -207,6 +217,13 @@ if [[ "$FULL_MODE" == true ]]; then
     FW_ZIP="$FILES_DIR/firmware.zip"
     [[ -f "$GPT_BIN" ]] || { echo "[-] Missing $GPT_BIN"; exit 1; }
     [[ -f "$FW_ZIP" ]]  || { echo "[-] Missing $FW_ZIP"; exit 1; }
+
+    echo "=== 0. Backing up device's own Radio & IMEI Calibration Partitions ==="
+    mkdir -p "$SAVED_DIR"
+    for n in fsc fsg modem modemst1 modemst2 persist sec; do
+        echo "[*] Reading device $n -> $SAVED_DIR/${n}.bin..."
+        edl r "$n" "$SAVED_DIR/${n}.bin" || true
+    done
 
     echo "=== 1. Flashing GPT (14 Partitions) ==="
     dd if="$GPT_BIN" bs=512 count=34         of="${raw_tmp}/primary.bin"        2>/dev/null
