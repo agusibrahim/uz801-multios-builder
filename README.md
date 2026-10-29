@@ -117,6 +117,10 @@ Gunakan mode ini jika dongle sudah pernah di-flash dengan skema partisi project 
 ./flash.sh kali          # Flash Kali Linux Rolling
 ./flash.sh alma          # Flash AlmaLinux 9.8
 ./flash.sh goos          # Flash UZ801 GoOS v1.0 (Pure Go PID 1)
+
+# Atau SUNTIKKAN WiFi SSID & Password rumah langsung saat flash:
+./flash.sh -s "NamaWiFi" -p "PasswordWiFi" void
+./flash.sh -f -s "NamaWiFi" -p "PasswordWiFi" alpine  # Full Flash + Suntik WiFi
 ```
 
 #### B. Mode Full (Flash GPT + Bootloader + Radio EFS + `boot` + `rootfs`)

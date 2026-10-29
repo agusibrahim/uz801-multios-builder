@@ -1,23 +1,30 @@
 #!/usr/bin/env bash
 # Multi-OS EDL Flasher for Yiming UZ801 v3.0 (MSM8916)
-# Supports: alpine, void, arch, dietpi
+# Supports: alpine, void, arch, dietpi, immortalwrt, ubuntu, chimera, pmos, kali, alma, goos
 # Usage:
-#   ./flash.sh [alpine|void|arch|dietpi]        - Lite flash (rootfs + boot only, fast)
-#   ./flash.sh -f [alpine|void|arch|dietpi]     - Full flash (GPT + firmware + radio + boot + rootfs)
+#   ./flash.sh [target]                      - Lite flash (boot & rootfs)
+#   ./flash.sh -f [target]                   - Full flash (GPT + firmware + radio + boot + rootfs)
+#   ./flash.sh -s "SSID" -p "PASS" [target]  - Suntikkan WiFi SSID & Password langsung saat flash!
 
 set -euo pipefail
 
 TOT_SECTORS=7634944
 FULL_MODE=false
+CUSTOM_WIFI_SSID=""
+CUSTOM_WIFI_PASS=""
 
-while getopts "flh" opt; do
+while getopts "flhs:p:" opt; do
     case $opt in
         f) FULL_MODE=true ;;
         l) FULL_MODE=false ;;
+        s) CUSTOM_WIFI_SSID="$OPTARG" ;;
+        p) CUSTOM_WIFI_PASS="$OPTARG" ;;
         *)
-            echo "Usage: $0 [-f|-l] [alpine|void|arch|dietpi]"
-            echo "  -l    Lite mode (default): Only flash boot & rootfs"
-            echo "  -f    Full mode: Flash GPT, bootloader firmware, radio EFS, boot, and rootfs"
+            echo "Usage: $0 [-f|-l] [-s <ssid> -p <password>] [target]"
+            echo "  -l           Lite mode (default): Flash boot & rootfs"
+            echo "  -f           Full mode: Flash GPT, bootloader firmware, radio EFS, boot, & rootfs"
+            echo "  -s <ssid>    Suntikkan nama WiFi (SSID) langsung ke rootfs sebelum diflash"
+            echo "  -p <pass>    Suntikkan password WiFi (WPA-PSK) langsung ke rootfs"
             exit 0
             ;;
     esac
@@ -98,6 +105,59 @@ echo "=== Decompressing image(s) ==="
 gunzip -c "$BOOT_GZ" > "${raw_tmp}/boot.raw"
 if [[ "$OS_CHOICE" != "boot" ]]; then
     gunzip -c "$ROOTFS_GZ" > "${raw_tmp}/rootfs.raw"
+fi
+
+# Suntikkan WiFi kustom langsung ke dalam ext4 rootfs jika parameter -s / -p diberikan
+if [[ -n "$CUSTOM_WIFI_SSID" ]] && [[ "$OS_CHOICE" != "boot" ]]; then
+    echo "[*] Menyuntikkan WiFi SSID '$CUSTOM_WIFI_SSID' ke dalam rootfs..."
+    wifi_tmp="${raw_tmp}/wlan.nmconnection"
+    cat > "$wifi_tmp" << EOF
+[connection]
+id=${CUSTOM_WIFI_SSID}
+uuid=f9ab6583-91df-496f-90a8-639bd3253a28
+type=wifi
+autoconnect=true
+interface-name=wlan0
+
+[wifi]
+mode=infrastructure
+ssid=${CUSTOM_WIFI_SSID}
+powersave=2
+
+[wifi-security]
+key-mgmt=wpa-psk
+psk=${CUSTOM_WIFI_PASS}
+
+[ipv4]
+method=auto
+
+[ipv6]
+addr-gen-mode=stable-privacy
+method=auto
+
+[proxy]
+EOF
+    chmod 0600 "$wifi_tmp"
+
+    if command -v e2cp >/dev/null 2>&1; then
+        e2cp -G 0 -O 0 -P 600 "$wifi_tmp" "${raw_tmp}/rootfs.raw:/etc/NetworkManager/system-connections/wlan.nmconnection" 2>/dev/null || true
+        # Juga suntikkan ke wpa_supplicant jika ada
+        wpa_tmp="${raw_tmp}/wpa_supplicant.conf"
+        cat > "$wpa_tmp" << EOF
+ctrl_interface=/var/run/wpa_supplicant
+update_config=1
+
+network={
+    ssid="${CUSTOM_WIFI_SSID}"
+    psk="${CUSTOM_WIFI_PASS}"
+}
+EOF
+        chmod 0600 "$wpa_tmp"
+        e2cp -G 0 -O 0 -P 600 "$wpa_tmp" "${raw_tmp}/rootfs.raw:/etc/wpa_supplicant/wpa_supplicant.conf" 2>/dev/null || true
+        echo "[+] Berhasil menyuntikkan WiFi '$CUSTOM_WIFI_SSID' via e2tools!"
+    else
+        echo "[!] Tool e2cp tidak ditemukan, instal via 'brew install e2tools' untuk fitur penyuntikan WiFi langsung."
+    fi
 fi
 
 if command -v adb >/dev/null 2>&1 && adb devices 2>/dev/null | grep -q "2c2d59162055f8d2"; then

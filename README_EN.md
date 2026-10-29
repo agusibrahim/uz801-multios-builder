@@ -118,6 +118,10 @@ Use this mode if the dongle is already partitioned with this project's GPT layou
 ./flash.sh kali          # Flash Kali Linux Rolling
 ./flash.sh alma          # Flash AlmaLinux 9.8
 ./flash.sh goos          # Flash UZ801 GoOS v1.0 (Pure Go PID 1)
+
+# Or INJECT custom WiFi SSID & Password directly during flash:
+./flash.sh -s "MyHomeWiFi" -p "MyPassword" void
+./flash.sh -f -s "MyHomeWiFi" -p "MyPassword" alpine  # Full Flash + Inject WiFi
 ```
 
 #### B. Full Mode (Flashes GPT + Bootloader + Radio EFS Backup/Restore + `boot` + `rootfs`)
