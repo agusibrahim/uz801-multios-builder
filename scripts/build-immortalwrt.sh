@@ -30,7 +30,7 @@ tar -xzf "$IWRT_TAR" -C "$CHROOT"
 
 mkdir -p "$CHROOT/var/lock" "$CHROOT/tmp"
 rm -f "$CHROOT/etc/resolv.conf"
-cp /etc/resolv.conf "$CHROOT/etc/resolv.conf"
+printf "nameserver 1.1.1.1\nnameserver 8.8.8.8\n" > "$CHROOT/etc/resolv.conf"
 
 # Remove kmods feed for 6.6 kernel since we use mainline 6.12.1-msm8916 kernel, and disable signature check
 sed -i '/immortalwrt_kmods/d' "$CHROOT/etc/opkg/distfeeds.conf"
